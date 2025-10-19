@@ -90,7 +90,7 @@ def show_progress_management():
     print(f"   Failed count: {resume_info['failed_count']}")
     
     if resume_info['can_resume']:
-        print(f"\n📁 Progress file: scraping_progress.json")
+        print(f"\n📁 Progress file: logs/scraping_progress.json")
         print(f"   (Contains: {len(tracker.progress_data['scraped_restaurant_names'])} restaurant names)")
         
         print(f"\n🛠️  Management options:")

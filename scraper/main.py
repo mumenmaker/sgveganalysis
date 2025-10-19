@@ -5,6 +5,7 @@ Scrapes restaurant data from HappyCow and stores it in Supabase database
 """
 
 import logging
+import os
 import sys
 from typing import List
 from happycow_scraper import HappyCowScraper
@@ -13,11 +14,14 @@ from models import Restaurant
 
 def setup_logging():
     """Setup logging configuration"""
+    # Ensure logs directory exists
+    os.makedirs('logs', exist_ok=True)
+    
     logging.basicConfig(
         level=logging.INFO,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         handlers=[
-            logging.FileHandler('scraper.log'),
+            logging.FileHandler('logs/scraper.log'),
             logging.StreamHandler(sys.stdout)
         ]
     )
@@ -66,7 +70,7 @@ def main():
         logger.info(f"Successfully scraped {len(restaurants)} new restaurants")
         
         # Save to JSON file as backup (with duplicate handling)
-        scraper.save_to_json(restaurants, 'singapore_restaurants.json', append=True)
+        scraper.save_to_json(restaurants, 'logs/singapore_restaurants.json', append=True)
         
         # Insert into database (with duplicate detection)
         logger.info("Inserting restaurants into database...")

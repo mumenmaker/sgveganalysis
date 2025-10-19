@@ -35,8 +35,18 @@ scraper.log
 
 # Data files
 *.json
-singapore_restaurants.json
-scraping_progress.json
+logs/
+
+# Debug files
+debug/*.html
+debug/*.log
+
+# Coverage reports
+htmlcov/
+.coverage
+
+# Test data files
+test_*.json
 
 # IDE
 .vscode/

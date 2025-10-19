@@ -27,11 +27,14 @@ class HappyCowScraper:
         
     def setup_logging(self):
         """Setup logging configuration"""
+        # Ensure logs directory exists
+        os.makedirs('logs', exist_ok=True)
+        
         logging.basicConfig(
             level=logging.INFO,
             format='%(asctime)s - %(levelname)s - %(message)s',
             handlers=[
-                logging.FileHandler('scraper.log'),
+                logging.FileHandler('logs/scraper.log'),
                 logging.StreamHandler()
             ]
         )
@@ -121,6 +124,28 @@ class HappyCowScraper:
             self.logger.info("Waiting for page to load...")
             time.sleep(10)
             
+            # Try to extract coordinates from page source (JavaScript data)
+            try:
+                page_source = driver.page_source
+                # Look for coordinate patterns in JavaScript
+                coord_patterns = [
+                    r'"lat":\s*(\d+\.\d+),\s*"lng":\s*(\d+\.\d+)',
+                    r'"latitude":\s*(\d+\.\d+),\s*"longitude":\s*(\d+\.\d+)',
+                    r'lat:\s*(\d+\.\d+),\s*lng:\s*(\d+\.\d+)',
+                    r'latitude:\s*(\d+\.\d+),\s*longitude:\s*(\d+\.\d+)'
+                ]
+                
+                page_coordinates = {}
+                for pattern in coord_patterns:
+                    matches = re.findall(pattern, page_source)
+                    if matches:
+                        self.logger.info(f"Found {len(matches)} coordinate pairs in page source")
+                        page_coordinates = {f"coord_{i}": (float(lat), float(lng)) for i, (lat, lng) in enumerate(matches)}
+                        break
+            except Exception as e:
+                self.logger.warning(f"Error extracting coordinates from page source: {e}")
+                page_coordinates = {}
+            
             # Try to find restaurant elements using the correct selector
             restaurant_elements = driver.find_elements(By.CSS_SELECTOR, '.venue-item')
             self.logger.info(f"Found {len(restaurant_elements)} restaurant elements")
@@ -141,15 +166,18 @@ class HappyCowScraper:
                     if lines:
                         restaurant_data['name'] = lines[0]  # First line is usually the name
                         
-                        # Try to extract rating from text like "4.5 (52)"
-                        for line in lines:
-                            if '(' in line and ')' in line and any(char.isdigit() for char in line):
+                        # Try to extract rating and review count
+                        for i, line in enumerate(lines):
+                            # Look for rating (usually a decimal number on its own line)
+                            if re.match(r'^\d+\.?\d*$', line) and '.' in line:
                                 try:
-                                    # Extract rating from text like "4.5 (52)"
-                                    rating_match = re.search(r'(\d+\.?\d*)', line)
-                                    if rating_match:
-                                        restaurant_data['rating'] = float(rating_match.group(1))
-                                    # Extract review count from text like "(52)"
+                                    restaurant_data['rating'] = float(line)
+                                except ValueError:
+                                    pass
+                            
+                            # Look for review count in parentheses
+                            if '(' in line and ')' in line:
+                                try:
                                     review_match = re.search(r'\((\d+)\)', line)
                                     if review_match:
                                         restaurant_data['review_count'] = int(review_match.group(1))
@@ -176,6 +204,49 @@ class HappyCowScraper:
                                 if href:
                                     restaurant_data['url'] = href
                         except:
+                            pass
+                        
+                        # Try to extract coordinates from data attributes on the main element
+                        try:
+                            lat = element.get_attribute('data-lat')
+                            lng = element.get_attribute('data-lng')
+                            if lat and lng:
+                                restaurant_data['latitude'] = float(lat)
+                                restaurant_data['longitude'] = float(lng)
+                        except (ValueError, TypeError):
+                            pass
+                        
+                        # If coordinates not found on main element, look for details element with same data-id
+                        if not restaurant_data.get('latitude') or not restaurant_data.get('longitude'):
+                            try:
+                                # Get the data-id from the main element
+                                main_id = element.get_attribute('data-id')
+                                if main_id:
+                                    # Look for details element with same data-id
+                                    details_element = driver.find_element(By.CSS_SELECTOR, f'div.details.hidden[data-id="{main_id}"]')
+                                    if details_element:
+                                        lat = details_element.get_attribute('data-lat')
+                                        lng = details_element.get_attribute('data-lng')
+                                        if lat and lng:
+                                            restaurant_data['latitude'] = float(lat)
+                                            restaurant_data['longitude'] = float(lng)
+                                            self.logger.debug(f"Found coordinates in details element: {lat}, {lng}")
+                            except Exception as e:
+                                self.logger.debug(f"Could not find details element for restaurant {i+1}: {e}")
+                        
+                        # Try to extract coordinates from other data attributes
+                        try:
+                            # Check for common coordinate attribute names
+                            for attr in ['data-latitude', 'data-longitude', 'data-coords', 'data-location']:
+                                value = element.get_attribute(attr)
+                                if value:
+                                    # Try to parse coordinate pairs
+                                    coord_match = re.search(r'(\d+\.\d+),\s*(\d+\.\d+)', value)
+                                    if coord_match:
+                                        restaurant_data['latitude'] = float(coord_match.group(1))
+                                        restaurant_data['longitude'] = float(coord_match.group(2))
+                                        break
+                        except (ValueError, TypeError):
                             pass
                         
                         # Determine restaurant type
@@ -252,8 +323,16 @@ class HappyCowScraper:
     def parse_restaurant_data(self, restaurant_data: Dict) -> Restaurant:
         """Parse restaurant data from search results"""
         try:
+            # Check if restaurant_data is valid
+            if not restaurant_data or not isinstance(restaurant_data, dict):
+                return None
+            
             # Extract basic information
             name = restaurant_data.get('name', '')
+            
+            # Check if we have at least a name
+            if not name or not name.strip():
+                return None
             address = restaurant_data.get('address', '')
             phone = restaurant_data.get('phone', '')
             website = restaurant_data.get('website', '')
@@ -430,9 +509,11 @@ class HappyCowScraper:
             self.logger.error(f"Error in requests scraping: {e}")
             return []
     
-    def save_to_json(self, restaurants: List[Restaurant], filename: str = 'singapore_restaurants.json', append: bool = True):
+    def save_to_json(self, restaurants: List[Restaurant], filename: str = 'logs/singapore_restaurants.json', append: bool = True):
         """Save restaurants to JSON file with duplicate handling"""
         try:
+            # Ensure logs directory exists
+            os.makedirs('logs', exist_ok=True)
             existing_restaurants = []
             
             # Load existing data if appending
@@ -463,7 +544,7 @@ class HappyCowScraper:
             
             # Save to file
             with open(filename, 'w', encoding='utf-8') as f:
-                json.dump([restaurant.dict() for restaurant in all_restaurants], f, indent=2, ensure_ascii=False)
+                json.dump([restaurant.model_dump() for restaurant in all_restaurants], f, indent=2, ensure_ascii=False)
             
             self.logger.info(f"JSON file updated: {new_count} new restaurants added, {duplicate_count} duplicates skipped")
             self.logger.info(f"Total restaurants in {filename}: {len(all_restaurants)}")

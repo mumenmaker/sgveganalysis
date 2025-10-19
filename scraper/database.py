@@ -86,12 +86,20 @@ class DatabaseManager:
             self.logger.error(f"Error creating tables: {e}")
             return False
     
-    def check_restaurant_exists(self, name: str, address: str = None) -> bool:
+    def check_restaurant_exists(self, name: str, address: str = None, latitude: float = None, longitude: float = None) -> bool:
         """Check if a restaurant already exists in the database"""
         if not self.supabase:
             return False
         
         try:
+            # First try to check by coordinates (most reliable)
+            if latitude is not None and longitude is not None:
+                query = self.supabase.table('restaurants').select('id').eq('latitude', latitude).eq('longitude', longitude)
+                result = query.limit(1).execute()
+                if len(result.data) > 0:
+                    return True
+            
+            # Fallback to name and address check
             query = self.supabase.table('restaurants').select('id').eq('name', name)
             if address:
                 query = query.eq('address', address)
@@ -119,12 +127,17 @@ class DatabaseManager:
             
             for restaurant in restaurants:
                 # Check for duplicates if skip_duplicates is True
-                if skip_duplicates and self.check_restaurant_exists(restaurant.name, restaurant.address):
-                    self.logger.info(f"Skipping duplicate: {restaurant.name}")
+                if skip_duplicates and self.check_restaurant_exists(
+                    restaurant.name, 
+                    restaurant.address, 
+                    restaurant.latitude, 
+                    restaurant.longitude
+                ):
+                    self.logger.info(f"Skipping duplicate: {restaurant.name} at ({restaurant.latitude}, {restaurant.longitude})")
                     skipped_count += 1
                     continue
                 
-                data = restaurant.dict()
+                data = restaurant.model_dump()
                 # Convert datetime to string for JSON serialization
                 data['scraped_at'] = data['scraped_at'].isoformat()
                 restaurant_data.append(data)
@@ -134,15 +147,24 @@ class DatabaseManager:
                 return True, 0, skipped_count
             
             # Insert into database
-            result = self.supabase.table('restaurants').insert(restaurant_data).execute()
-            
-            if result.data:
-                inserted_count = len(result.data)
-                self.logger.info(f"Successfully inserted {inserted_count} restaurants, skipped {skipped_count} duplicates")
-                return True, inserted_count, skipped_count
-            else:
-                self.logger.error("Failed to insert restaurants")
-                return False, 0, skipped_count
+            try:
+                result = self.supabase.table('restaurants').insert(restaurant_data).execute()
+                
+                if result.data:
+                    inserted_count = len(result.data)
+                    self.logger.info(f"Successfully inserted {inserted_count} restaurants, skipped {skipped_count} duplicates")
+                    return True, inserted_count, skipped_count
+                else:
+                    self.logger.error("Failed to insert restaurants")
+                    return False, 0, skipped_count
+            except Exception as e:
+                # Handle unique constraint violations (location-based duplicates)
+                if "duplicate key value violates unique constraint" in str(e).lower():
+                    self.logger.warning(f"Duplicate restaurant locations detected, skipping insertion: {e}")
+                    return True, 0, len(restaurant_data)  # All were duplicates
+                else:
+                    self.logger.error(f"Database insertion error: {e}")
+                    return False, 0, skipped_count
                 
         except Exception as e:
             self.logger.error(f"Error inserting restaurants: {e}")

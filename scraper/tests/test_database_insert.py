@@ -125,7 +125,7 @@ if __name__ == "__main__":
     else:
         print("\n❌ Database insert test failed")
         print("\nPlease make sure:")
-        print("1. You have created the tables in Supabase (run create_tables.sql)")
+        print("1. You have created the tables in Supabase (run database/create_tables.sql)")
         print("2. Your .env file has correct SUPABASE_URL and SUPABASE_KEY")
         print("3. The tables are accessible from your Supabase project")
         sys.exit(1)

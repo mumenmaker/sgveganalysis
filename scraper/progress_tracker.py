@@ -7,9 +7,11 @@ import logging
 class ProgressTracker:
     """Track scraping progress and enable resume functionality"""
     
-    def __init__(self, progress_file: str = 'scraping_progress.json'):
+    def __init__(self, progress_file: str = 'logs/scraping_progress.json'):
         self.progress_file = progress_file
         self.logger = logging.getLogger(__name__)
+        # Ensure logs directory exists
+        os.makedirs('logs', exist_ok=True)
         self.progress_data = self.load_progress()
     
     def load_progress(self) -> Dict:
