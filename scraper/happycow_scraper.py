@@ -167,7 +167,7 @@ class HappyCowScraper:
                         restaurant_data['name'] = lines[0]  # First line is usually the name
                         
                         # Try to extract rating and review count
-                        for i, line in enumerate(lines):
+                        for line_idx, line in enumerate(lines):
                             # Look for rating (usually a decimal number on its own line)
                             if re.match(r'^\d+\.?\d*$', line) and '.' in line:
                                 try:
