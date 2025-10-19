@@ -285,7 +285,7 @@ class HappyCowScraper:
             
             all_restaurants = []
             page = 1
-            max_pages = 20  # Get all pages for complete dataset (~1500 restaurants)
+            max_pages = 1  # Test with 1 page first
             
             while page <= max_pages:
                 self.logger.info(f"Scraping page {page}/{max_pages}...")
@@ -298,9 +298,9 @@ class HappyCowScraper:
                 self.logger.info(f"Loading page {page}: {url}")
                 driver.get(url)
                 
-                # Wait for page to load
+                # Wait for page to load and coordinates to be populated
                 self.logger.info(f"Waiting for page {page} to load...")
-                time.sleep(10)
+                time.sleep(15)  # Increased wait time for coordinates to load
                 
                 # Find restaurant elements on this page
                 from selenium.webdriver.common.by import By
@@ -315,7 +315,7 @@ class HappyCowScraper:
                 page_restaurants = []
                 for i, element in enumerate(restaurant_elements):
                     try:
-                        restaurant_data = self._extract_restaurant_data_from_element(element, i)
+                        restaurant_data = self._extract_restaurant_data_from_element(element, i, driver)
                         if restaurant_data and restaurant_data.get('name'):
                             page_restaurants.append(restaurant_data)
                             self.logger.info(f"Extracted restaurant {i+1} from page {page}: {restaurant_data.get('name')}")
@@ -343,8 +343,10 @@ class HappyCowScraper:
         finally:
             self.close_selenium()
     
-    def _extract_restaurant_data_from_element(self, element, index: int) -> Dict:
+    def _extract_restaurant_data_from_element(self, element, index: int, driver=None) -> Dict:
         """Extract restaurant data from a single element"""
+        import re  # Import re at the beginning of the method
+        
         try:
             restaurant_data = {}
             
@@ -396,13 +398,93 @@ class HappyCowScraper:
                 except:
                     pass
                 
-                # Try to extract coordinates
+                # Try to extract coordinates from data attributes on the main element
                 try:
                     lat = element.get_attribute('data-lat')
                     lng = element.get_attribute('data-lng')
                     if lat and lng:
                         restaurant_data['latitude'] = float(lat)
                         restaurant_data['longitude'] = float(lng)
+                except (ValueError, TypeError):
+                    pass
+                
+                # If coordinates not found on main element, look for details element with same data-id
+                if not restaurant_data.get('latitude') or not restaurant_data.get('longitude'):
+                    try:
+                        # Get the data-id from the main element
+                        main_id = element.get_attribute('data-id')
+                        if main_id:
+                            # Look for details element with same data-id
+                            from selenium.webdriver.common.by import By
+                            details_element = driver.find_element(By.CSS_SELECTOR, f'div.details.hidden[data-id="{main_id}"]')
+                            if details_element:
+                                lat = details_element.get_attribute('data-lat')
+                                lng = details_element.get_attribute('data-lng')
+                                if lat and lng:
+                                    restaurant_data['latitude'] = float(lat)
+                                    restaurant_data['longitude'] = float(lng)
+                                    self.logger.debug(f"Found coordinates in details element: {lat}, {lng}")
+                    except Exception as e:
+                        self.logger.debug(f"Could not find details element for restaurant {index+1}: {e}")
+                
+                # If still no coordinates, look for any hidden details elements with coordinates
+                if not restaurant_data.get('latitude') or not restaurant_data.get('longitude'):
+                    try:
+                        from selenium.webdriver.common.by import By
+                        # Look for any hidden details elements that have coordinates
+                        hidden_details = driver.find_elements(By.CSS_SELECTOR, 'div.details.hidden[data-lat][data-lng]')
+                        if hidden_details:
+                            # Use the first one found (we can improve this later to match by restaurant name or other criteria)
+                            details_element = hidden_details[0]
+                            lat = details_element.get_attribute('data-lat')
+                            lng = details_element.get_attribute('data-lng')
+                            if lat and lng:
+                                restaurant_data['latitude'] = float(lat)
+                                restaurant_data['longitude'] = float(lng)
+                                self.logger.debug(f"Found coordinates in hidden details element: {lat}, {lng}")
+                    except Exception as e:
+                        self.logger.debug(f"Could not find hidden details element for restaurant {index+1}: {e}")
+                
+                # If still no coordinates, try to extract from page source using data-id
+                if not restaurant_data.get('latitude') or not restaurant_data.get('longitude'):
+                    try:
+                        main_id = element.get_attribute('data-id')
+                        if main_id:
+                            # Look for coordinates in page source using the data-id
+                            page_source = driver.page_source
+                            
+                            # Look for the data-id in the page source and extract coordinates from nearby elements
+                            
+                            # Pattern to find the data-id and extract coordinates from the same element or nearby
+                            pattern = rf'data-id="{main_id}"[^>]*data-lat="([^"]+)"[^>]*data-lng="([^"]+)"'
+                            match = re.search(pattern, page_source)
+                            if match:
+                                restaurant_data['latitude'] = float(match.group(1))
+                                restaurant_data['longitude'] = float(match.group(2))
+                                self.logger.debug(f"Found coordinates in page source: {match.group(1)}, {match.group(2)}")
+                            else:
+                                # Try alternative pattern - look for data-id followed by coordinates in the same line
+                                pattern2 = rf'data-id="{main_id}"[^>]*?data-lat="([^"]+)"[^>]*?data-lng="([^"]+)"'
+                                match2 = re.search(pattern2, page_source, re.DOTALL)
+                                if match2:
+                                    restaurant_data['latitude'] = float(match2.group(1))
+                                    restaurant_data['longitude'] = float(match2.group(2))
+                                    self.logger.debug(f"Found coordinates in page source (alt pattern): {match2.group(1)}, {match2.group(2)}")
+                    except Exception as e:
+                        self.logger.debug(f"Could not extract coordinates from page source for restaurant {index+1}: {e}")
+                
+                # Try to extract coordinates from other data attributes
+                try:
+                    # Check for common coordinate attribute names
+                    for attr in ['data-latitude', 'data-longitude', 'data-coords', 'data-location']:
+                        value = element.get_attribute(attr)
+                        if value:
+                            # Try to parse coordinate pairs
+                            coord_match = re.search(r'(\d+\.\d+),\s*(\d+\.\d+)', value)
+                            if coord_match:
+                                restaurant_data['latitude'] = float(coord_match.group(1))
+                                restaurant_data['longitude'] = float(coord_match.group(2))
+                                break
                 except (ValueError, TypeError):
                     pass
                 
@@ -481,14 +563,19 @@ class HappyCowScraper:
             # Check if we have at least a name
             if not name or not name.strip():
                 return None
+            
+            # Debug logging for coordinates
+            lat = restaurant_data.get('latitude')
+            lng = restaurant_data.get('longitude')
+            self.logger.debug(f"Parsing restaurant {name}: lat={lat}, lng={lng}")
             address = restaurant_data.get('address', '')
             phone = restaurant_data.get('phone', '')
             website = restaurant_data.get('website', '')
             description = restaurant_data.get('description', '')
             
             # Extract coordinates
-            lat = restaurant_data.get('lat')
-            lng = restaurant_data.get('lng')
+            lat = restaurant_data.get('latitude')
+            lng = restaurant_data.get('longitude')
             latitude = float(lat) if lat else None
             longitude = float(lng) if lng else None
             
@@ -593,10 +680,23 @@ class HappyCowScraper:
                 self.logger.info(f"Processing restaurant {i+1}/{len(restaurant_data)}: {restaurant_name}")
                 
                 try:
+                    # Preserve coordinates before updating with details
+                    original_latitude = data.get('latitude')
+                    original_longitude = data.get('longitude')
+                    self.logger.debug(f"Original coordinates for {restaurant_name}: lat={original_latitude}, lng={original_longitude}")
+                    
                     # Get detailed information if URL is available
                     if data.get('url'):
                         details = self.scrape_restaurant_details(data['url'])
                         data.update(details)
+                        
+                        # Restore coordinates if they were lost
+                        if original_latitude and original_longitude:
+                            data['latitude'] = original_latitude
+                            data['longitude'] = original_longitude
+                            self.logger.debug(f"Restored coordinates for {restaurant_name}: lat={data['latitude']}, lng={data['longitude']}")
+                        else:
+                            self.logger.debug(f"No coordinates to restore for {restaurant_name}")
                     
                     # Parse and create Restaurant object
                     restaurant = self.parse_restaurant_data(data)

@@ -18,7 +18,7 @@ def setup_logging():
     os.makedirs('logs', exist_ok=True)
     
     logging.basicConfig(
-        level=logging.INFO,
+        level=logging.DEBUG,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         handlers=[
             logging.FileHandler('logs/scraper.log'),
