@@ -107,6 +107,7 @@ def main():
                     print("   - Progress tracking cleared")
                     print("   - Log files removed")
                     print("   - Ready for fresh scraping")
+                    return
 
                 except Exception as e:
                     logger.error(f"Error clearing database: {e}")

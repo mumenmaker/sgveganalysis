@@ -348,8 +348,8 @@ class HappyCowScraper:
                                     page_restaurant_objects.append(restaurant)
                             
                             if page_restaurant_objects:
-                                # Insert into database
-                                success, inserted_count, skipped_count = db_manager.insert_restaurants(page_restaurant_objects, skip_duplicates=True)
+                                # Insert into database (let database handle duplicates via unique constraint)
+                                success, inserted_count, skipped_count = db_manager.insert_restaurants(page_restaurant_objects, skip_duplicates=False)
                                 if success:
                                     self.logger.info(f"Inserted {inserted_count} restaurants from page {page}, skipped {skipped_count} duplicates")
                                 else:
@@ -392,6 +392,31 @@ class HappyCowScraper:
             full_text = element.text.strip()
             lines = [line.strip() for line in full_text.split('\n') if line.strip()]
             
+            # If no text content, try to find restaurant name in child elements
+            if not lines:
+                try:
+                    from selenium.webdriver.common.by import By
+                    # Look for common restaurant name selectors
+                    name_selectors = ['h3', 'h4', '.name', '.title', '.restaurant-name', 'a', '.venue-name']
+                    for selector in name_selectors:
+                        try:
+                            name_elem = element.find_element(By.CSS_SELECTOR, selector)
+                            if name_elem and name_elem.text.strip():
+                                restaurant_data['name'] = name_elem.text.strip()
+                                break
+                        except:
+                            continue
+                    
+                    # If still no name, try to get it from the first child element with text
+                    if not restaurant_data.get('name'):
+                        children = element.find_elements(By.XPATH, "./*")
+                        for child in children:
+                            if child.text.strip():
+                                restaurant_data['name'] = child.text.strip()
+                                break
+                except Exception as e:
+                    self.logger.debug(f"Could not extract name from child elements: {e}")
+
             if lines:
                 restaurant_data['name'] = lines[0]  # First line is usually the name
                 
@@ -436,32 +461,23 @@ class HappyCowScraper:
                 except:
                     pass
                 
-                # Try to extract coordinates from data attributes on the main element
-                try:
-                    lat = element.get_attribute('data-lat')
-                    lng = element.get_attribute('data-lng')
-                    if lat and lng:
-                        restaurant_data['latitude'] = float(lat)
-                        restaurant_data['longitude'] = float(lng)
-                except (ValueError, TypeError):
-                    pass
                 
-                # If coordinates not found on main element, look for details element with same data-marker-id
+                # If coordinates not found on main element, look for details element by position
                 if not restaurant_data.get('latitude') or not restaurant_data.get('longitude'):
                     try:
-                        # Get the data-marker-id from the main element
-                        marker_id = element.get_attribute('data-marker-id')
-                        if marker_id:
-                            # Look for details element with same data-marker-id
-                            from selenium.webdriver.common.by import By
-                            details_element = driver.find_element(By.CSS_SELECTOR, f'div.details.hidden[data-marker-id="{marker_id}"]')
-                            if details_element:
-                                lat = details_element.get_attribute('data-lat')
-                                lng = details_element.get_attribute('data-lng')
-                                if lat and lng:
-                                    restaurant_data['latitude'] = float(lat)
-                                    restaurant_data['longitude'] = float(lng)
-                                    self.logger.debug(f"Found coordinates in details element: {lat}, {lng}")
+                        # Get all hidden details elements
+                        from selenium.webdriver.common.by import By
+                        hidden_details = driver.find_elements(By.CSS_SELECTOR, 'div.details.hidden')
+                        
+                        # Use the index to match with the corresponding hidden details element
+                        if index < len(hidden_details):
+                            details_element = hidden_details[index]
+                            lat = details_element.get_attribute('data-lat')
+                            lng = details_element.get_attribute('data-lng')
+                            if lat and lng:
+                                restaurant_data['latitude'] = float(lat)
+                                restaurant_data['longitude'] = float(lng)
+                                self.logger.debug(f"Found coordinates in details element by position: {lat}, {lng}")
                     except Exception as e:
                         self.logger.debug(f"Could not find details element for restaurant {index+1}: {e}")
                 
