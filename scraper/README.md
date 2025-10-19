@@ -34,6 +34,8 @@ python main.py test      # Test database connection
 python main.py clear     # Clear progress and start fresh
 python main.py clear-db  # Clear database records and progress
 python main.py status    # Show current scraping status
+python main.py 100       # Run scraper with max_pages=100
+python main.py           # Run scraper with default max_pages=50
 ```
 
 ## Project Structure

@@ -272,7 +272,7 @@ class HappyCowScraper:
         finally:
             self.close_selenium()
     
-    def scrape_with_selenium_paginated(self) -> List[Dict]:
+    def scrape_with_selenium_paginated(self, max_pages: int = 50) -> List[Dict]:
         """Scrape restaurants using Selenium with pagination to get all results"""
         if not self.use_selenium:
             return []
@@ -285,7 +285,6 @@ class HappyCowScraper:
             
             all_restaurants = []
             page = 1
-            max_pages = 1  # Test with 1 page first
             
             while page <= max_pages:
                 self.logger.info(f"Scraping page {page}/{max_pages}...")
@@ -325,6 +324,36 @@ class HappyCowScraper:
                 
                 self.logger.info(f"Successfully extracted {len(page_restaurants)} restaurants from page {page}")
                 all_restaurants.extend(page_restaurants)
+                
+                # Insert restaurants from this page into database immediately
+                if page_restaurants:
+                    try:
+                        from database import DatabaseManager
+                        db_manager = DatabaseManager()
+                        if db_manager.supabase:
+                            # Convert to Restaurant objects
+                            page_restaurant_objects = []
+                            for data in page_restaurants:
+                                restaurant = self.parse_restaurant_data(data)
+                                if restaurant:
+                                    page_restaurant_objects.append(restaurant)
+                            
+                            if page_restaurant_objects:
+                                # Insert into database
+                                success, inserted_count, skipped_count = db_manager.insert_restaurants(page_restaurant_objects, skip_duplicates=True)
+                                if success:
+                                    self.logger.info(f"Inserted {inserted_count} restaurants from page {page}, skipped {skipped_count} duplicates")
+                                else:
+                                    self.logger.warning(f"Failed to insert restaurants from page {page}")
+                            
+                            db_manager.close_connection()
+                    except Exception as e:
+                        self.logger.error(f"Error inserting restaurants from page {page}: {e}")
+                
+                # If no restaurants were extracted from this page, we've likely reached the end
+                if len(page_restaurants) == 0:
+                    self.logger.info(f"No restaurants extracted from page {page}, stopping pagination")
+                    break
                 
                 # Move to next page
                 page += 1
@@ -628,7 +657,7 @@ class HappyCowScraper:
             self.logger.error(f"Error parsing restaurant data: {e}")
             return None
     
-    def scrape_singapore_restaurants(self, resume: bool = True) -> List[Restaurant]:
+    def scrape_singapore_restaurants(self, resume: bool = True, max_pages: int = 50) -> List[Restaurant]:
         """Scrape all restaurants from Singapore search results with resume support"""
         restaurants = []
         
@@ -649,7 +678,7 @@ class HappyCowScraper:
         try:
             if self.use_selenium:
                 # Use Selenium for dynamic content with pagination
-                restaurant_data = self.scrape_with_selenium_paginated()
+                restaurant_data = self.scrape_with_selenium_paginated(max_pages)
             else:
                 # Use traditional HTTP requests (likely won't work for dynamic content)
                 restaurant_data = self.scrape_with_requests()
@@ -685,18 +714,9 @@ class HappyCowScraper:
                     original_longitude = data.get('longitude')
                     self.logger.debug(f"Original coordinates for {restaurant_name}: lat={original_latitude}, lng={original_longitude}")
                     
-                    # Get detailed information if URL is available
-                    if data.get('url'):
-                        details = self.scrape_restaurant_details(data['url'])
-                        data.update(details)
-                        
-                        # Restore coordinates if they were lost
-                        if original_latitude and original_longitude:
-                            data['latitude'] = original_latitude
-                            data['longitude'] = original_longitude
-                            self.logger.debug(f"Restored coordinates for {restaurant_name}: lat={data['latitude']}, lng={data['longitude']}")
-                        else:
-                            self.logger.debug(f"No coordinates to restore for {restaurant_name}")
+                    # Skip individual detail scraping to avoid 403 errors
+                    # We already have all necessary data from Selenium scraping
+                    self.logger.debug(f"Using data from Selenium scraping for {restaurant_name}: lat={original_latitude}, lng={original_longitude}")
                     
                     # Parse and create Restaurant object
                     restaurant = self.parse_restaurant_data(data)
