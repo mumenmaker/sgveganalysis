@@ -7,15 +7,22 @@ import os
 from typing import List, Dict, Optional
 from bs4 import BeautifulSoup
 from fake_useragent import UserAgent
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 from config import Config
 from models import Restaurant
 from progress_tracker import ProgressTracker
 
 class HappyCowScraper:
-    def __init__(self, enable_resume: bool = True):
+    def __init__(self, enable_resume: bool = True, use_selenium: bool = True):
         self.session = requests.Session()
         self.ua = UserAgent()
         self.progress_tracker = ProgressTracker() if enable_resume else None
+        self.use_selenium = use_selenium
+        self.driver = None
         self.setup_logging()
         
     def setup_logging(self):
@@ -29,6 +36,33 @@ class HappyCowScraper:
             ]
         )
         self.logger = logging.getLogger(__name__)
+    
+    def setup_selenium(self):
+        """Setup Selenium WebDriver"""
+        if not self.use_selenium:
+            return None
+            
+        try:
+            chrome_options = Options()
+            chrome_options.add_argument('--headless')  # Run in background
+            chrome_options.add_argument('--no-sandbox')
+            chrome_options.add_argument('--disable-dev-shm-usage')
+            chrome_options.add_argument('--disable-gpu')
+            chrome_options.add_argument('--window-size=1920,1080')
+            chrome_options.add_argument('--user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36')
+            
+            self.driver = webdriver.Chrome(options=chrome_options)
+            self.driver.set_page_load_timeout(30)
+            return self.driver
+        except Exception as e:
+            self.logger.error(f"Failed to setup Selenium: {e}")
+            return None
+    
+    def close_selenium(self):
+        """Close Selenium WebDriver"""
+        if self.driver:
+            self.driver.quit()
+            self.driver = None
     
     def get_headers(self):
         """Get headers with random user agent"""
@@ -65,6 +99,107 @@ class HappyCowScraper:
                 time.sleep(2 ** retries)  # Exponential backoff
                 return self.make_request(url, params, retries + 1)
             return None
+    
+    def scrape_with_selenium(self) -> List[Dict]:
+        """Scrape restaurants using Selenium for dynamic content"""
+        if not self.use_selenium:
+            return []
+        
+        try:
+            self.logger.info("Setting up Selenium WebDriver...")
+            driver = self.setup_selenium()
+            if not driver:
+                return []
+            
+            # Build URL with parameters
+            url = f"{Config.SEARCH_URL}?s={Config.SINGAPORE_PARAMS['s']}&location={Config.SINGAPORE_PARAMS['location']}&lat={Config.SINGAPORE_PARAMS['lat']}&lng={Config.SINGAPORE_PARAMS['lng']}&page={Config.SINGAPORE_PARAMS['page']}&zoom={Config.SINGAPORE_PARAMS['zoom']}&metric={Config.SINGAPORE_PARAMS['metric']}&limit={Config.SINGAPORE_PARAMS['limit']}&order={Config.SINGAPORE_PARAMS['order']}"
+            
+            self.logger.info(f"Loading page: {url}")
+            driver.get(url)
+            
+            # Wait for page to load and data to be populated
+            self.logger.info("Waiting for page to load...")
+            time.sleep(10)
+            
+            # Try to find restaurant elements using the correct selector
+            restaurant_elements = driver.find_elements(By.CSS_SELECTOR, '.venue-item')
+            self.logger.info(f"Found {len(restaurant_elements)} restaurant elements")
+            
+            if not restaurant_elements:
+                self.logger.warning("No restaurant elements found with .venue-item selector")
+                return []
+            
+            restaurants = []
+            for i, element in enumerate(restaurant_elements):
+                try:
+                    restaurant_data = {}
+                    
+                    # Get all text and split by lines
+                    full_text = element.text.strip()
+                    lines = [line.strip() for line in full_text.split('\n') if line.strip()]
+                    
+                    if lines:
+                        restaurant_data['name'] = lines[0]  # First line is usually the name
+                        
+                        # Try to extract rating from text like "4.5 (52)"
+                        for line in lines:
+                            if '(' in line and ')' in line and any(char.isdigit() for char in line):
+                                try:
+                                    # Extract rating from text like "4.5 (52)"
+                                    rating_match = re.search(r'(\d+\.?\d*)', line)
+                                    if rating_match:
+                                        restaurant_data['rating'] = float(rating_match.group(1))
+                                    # Extract review count from text like "(52)"
+                                    review_match = re.search(r'\((\d+)\)', line)
+                                    if review_match:
+                                        restaurant_data['review_count'] = int(review_match.group(1))
+                                except ValueError:
+                                    pass
+                        
+                        # Try to extract restaurant type
+                        for line in lines:
+                            if any(word in line.lower() for word in ['vegan', 'vegetarian', 'veg-friendly', 'restaurant', 'cafe']):
+                                restaurant_data['type'] = line
+                                break
+                        
+                        # Try to extract address (usually the last line with location info)
+                        for line in reversed(lines):
+                            if any(word in line.lower() for word in ['mi', 'km', 'miles', 'singapore', 'road', 'street', 'avenue']):
+                                restaurant_data['address'] = line
+                                break
+                        
+                        # Try to extract URL
+                        try:
+                            link_elem = element.find_element(By.CSS_SELECTOR, 'a')
+                            if link_elem:
+                                href = link_elem.get_attribute('href')
+                                if href:
+                                    restaurant_data['url'] = href
+                        except:
+                            pass
+                        
+                        # Determine restaurant type
+                        restaurant_type = restaurant_data.get('type', '').lower()
+                        restaurant_data['is_vegan'] = 'vegan' in restaurant_type
+                        restaurant_data['is_vegetarian'] = 'vegetarian' in restaurant_type
+                        restaurant_data['has_veg_options'] = 'veg' in restaurant_type or 'friendly' in restaurant_type
+                        
+                        if restaurant_data.get('name'):
+                            restaurants.append(restaurant_data)
+                            self.logger.info(f"Extracted restaurant {i+1}: {restaurant_data.get('name')}")
+                
+                except Exception as e:
+                    self.logger.warning(f"Error extracting restaurant {i+1}: {e}")
+                    continue
+            
+            self.logger.info(f"Successfully extracted {len(restaurants)} restaurants using Selenium")
+            return restaurants
+            
+        except Exception as e:
+            self.logger.error(f"Error in Selenium scraping: {e}")
+            return []
+        finally:
+            self.close_selenium()
     
     def scrape_restaurant_details(self, restaurant_url: str) -> Dict:
         """Scrape detailed information from individual restaurant page"""
@@ -198,68 +333,16 @@ class HappyCowScraper:
             self.progress_tracker.start_scraping()
         
         try:
-            # Get initial search results
-            response = self.make_request(Config.SEARCH_URL, Config.SINGAPORE_PARAMS)
-            if not response:
-                self.logger.error("Failed to get initial search results")
-                return restaurants
+            if self.use_selenium:
+                # Use Selenium for dynamic content
+                restaurant_data = self.scrape_with_selenium()
+            else:
+                # Use traditional HTTP requests (likely won't work for dynamic content)
+                restaurant_data = self.scrape_with_requests()
             
-            soup = BeautifulSoup(response.content, 'html.parser')
-            
-            # Look for restaurant data in script tags (common pattern for dynamic content)
-            script_tags = soup.find_all('script', type='text/javascript')
-            restaurant_data = []
-            
-            for script in script_tags:
-                if script.string and 'restaurants' in script.string:
-                    try:
-                        # Extract JSON data from script
-                        json_match = re.search(r'var\s+restaurants\s*=\s*(\[.*?\]);', script.string, re.DOTALL)
-                        if json_match:
-                            json_str = json_match.group(1)
-                            restaurant_data = json.loads(json_str)
-                            break
-                    except (json.JSONDecodeError, AttributeError):
-                        continue
-            
-            # If no JSON data found, try to parse HTML elements
             if not restaurant_data:
-                restaurant_elements = soup.find_all('div', class_='restaurant-item')
-                for elem in restaurant_elements:
-                    restaurant_info = {}
-                    
-                    # Extract name
-                    name_elem = elem.find('h3', class_='name')
-                    if name_elem:
-                        restaurant_info['name'] = name_elem.get_text(strip=True)
-                    
-                    # Extract address
-                    address_elem = elem.find('div', class_='address')
-                    if address_elem:
-                        restaurant_info['address'] = address_elem.get_text(strip=True)
-                    
-                    # Extract rating
-                    rating_elem = elem.find('span', class_='rating')
-                    if rating_elem:
-                        try:
-                            restaurant_info['rating'] = float(rating_elem.get_text(strip=True))
-                        except ValueError:
-                            pass
-                    
-                    # Extract type
-                    type_elem = elem.find('span', class_='type')
-                    if type_elem:
-                        restaurant_info['type'] = type_elem.get_text(strip=True)
-                    
-                    # Extract URL
-                    link_elem = elem.find('a')
-                    if link_elem:
-                        href = link_elem.get('href')
-                        if href:
-                            restaurant_info['url'] = Config.BASE_URL + href
-                    
-                    if restaurant_info:
-                        restaurant_data.append(restaurant_info)
+                self.logger.error("No restaurant data found")
+                return restaurants
             
             self.logger.info(f"Found {len(restaurant_data)} restaurants")
             
@@ -317,6 +400,35 @@ class HappyCowScraper:
             self.logger.error(f"Error scraping restaurants: {e}")
         
         return restaurants
+    
+    def scrape_with_requests(self) -> List[Dict]:
+        """Scrape using traditional HTTP requests (for static content)"""
+        try:
+            response = self.make_request(Config.SEARCH_URL, Config.SINGAPORE_PARAMS)
+            if not response:
+                return []
+            
+            soup = BeautifulSoup(response.content, 'html.parser')
+            restaurant_data = []
+            
+            # Look for restaurant data in script tags
+            script_tags = soup.find_all('script', type='text/javascript')
+            for script in script_tags:
+                if script.string and 'restaurants' in script.string:
+                    try:
+                        json_match = re.search(r'var\s+restaurants\s*=\s*(\[.*?\]);', script.string, re.DOTALL)
+                        if json_match:
+                            json_str = json_match.group(1)
+                            restaurant_data = json.loads(json_str)
+                            break
+                    except (json.JSONDecodeError, AttributeError):
+                        continue
+            
+            return restaurant_data
+            
+        except Exception as e:
+            self.logger.error(f"Error in requests scraping: {e}")
+            return []
     
     def save_to_json(self, restaurants: List[Restaurant], filename: str = 'singapore_restaurants.json', append: bool = True):
         """Save restaurants to JSON file with duplicate handling"""

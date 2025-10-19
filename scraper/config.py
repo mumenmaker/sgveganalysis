@@ -24,6 +24,7 @@ class Config:
         'location': 'Central Singapore, Singapore',
         'lat': '1.34183',
         'lng': '103.861',
+        'page': '1',
         'zoom': '11',
         'metric': 'mi',
         'limit': '81',
