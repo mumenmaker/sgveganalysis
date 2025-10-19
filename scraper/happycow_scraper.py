@@ -146,13 +146,17 @@ class HappyCowScraper:
                 self.logger.warning(f"Error extracting coordinates from page source: {e}")
                 page_coordinates = {}
             
-            # Try to find restaurant elements using the correct selector
-            restaurant_elements = driver.find_elements(By.CSS_SELECTOR, '.venue-item')
-            self.logger.info(f"Found {len(restaurant_elements)} restaurant elements")
+            # Try to find restaurant elements using data-marker-id selector
+            restaurant_elements = driver.find_elements(By.CSS_SELECTOR, 'div[data-marker-id]')
+            self.logger.info(f"Found {len(restaurant_elements)} restaurant elements with data-marker-id")
             
             if not restaurant_elements:
-                self.logger.warning("No restaurant elements found with .venue-item selector")
-                return []
+                self.logger.warning("No restaurant elements found with data-marker-id selector")
+                # Fallback to original selector
+                restaurant_elements = driver.find_elements(By.CSS_SELECTOR, '.venue-item')
+                self.logger.info(f"Fallback: Found {len(restaurant_elements)} restaurant elements with .venue-item")
+                if not restaurant_elements:
+                    return []
             
             restaurants = []
             for i, element in enumerate(restaurant_elements):
@@ -301,14 +305,19 @@ class HappyCowScraper:
                 self.logger.info(f"Waiting for page {page} to load...")
                 time.sleep(15)  # Increased wait time for coordinates to load
                 
-                # Find restaurant elements on this page
+                # Find restaurant elements on this page using data-marker-id
                 from selenium.webdriver.common.by import By
-                restaurant_elements = driver.find_elements(By.CSS_SELECTOR, '.venue-item')
-                self.logger.info(f"Found {len(restaurant_elements)} restaurant elements on page {page}")
+                restaurant_elements = driver.find_elements(By.CSS_SELECTOR, 'div[data-marker-id]')
+                self.logger.info(f"Found {len(restaurant_elements)} restaurant elements with data-marker-id on page {page}")
                 
                 if not restaurant_elements:
-                    self.logger.warning(f"No restaurant elements found on page {page}")
-                    break  # No more restaurants, exit pagination
+                    self.logger.warning(f"No restaurant elements found with data-marker-id on page {page}")
+                    # Fallback to original selector
+                    restaurant_elements = driver.find_elements(By.CSS_SELECTOR, '.venue-item')
+                    self.logger.info(f"Fallback: Found {len(restaurant_elements)} restaurant elements with .venue-item on page {page}")
+                    if not restaurant_elements:
+                        self.logger.warning(f"No restaurant elements found on page {page}")
+                        break  # No more restaurants, exit pagination
                 
                 # Extract restaurants from this page
                 page_restaurants = []
@@ -346,7 +355,7 @@ class HappyCowScraper:
                                 else:
                                     self.logger.warning(f"Failed to insert restaurants from page {page}")
                             
-                            db_manager.close_connection()
+                            # DatabaseManager doesn't need explicit connection closing
                     except Exception as e:
                         self.logger.error(f"Error inserting restaurants from page {page}: {e}")
                 
@@ -437,15 +446,15 @@ class HappyCowScraper:
                 except (ValueError, TypeError):
                     pass
                 
-                # If coordinates not found on main element, look for details element with same data-id
+                # If coordinates not found on main element, look for details element with same data-marker-id
                 if not restaurant_data.get('latitude') or not restaurant_data.get('longitude'):
                     try:
-                        # Get the data-id from the main element
-                        main_id = element.get_attribute('data-id')
-                        if main_id:
-                            # Look for details element with same data-id
+                        # Get the data-marker-id from the main element
+                        marker_id = element.get_attribute('data-marker-id')
+                        if marker_id:
+                            # Look for details element with same data-marker-id
                             from selenium.webdriver.common.by import By
-                            details_element = driver.find_element(By.CSS_SELECTOR, f'div.details.hidden[data-id="{main_id}"]')
+                            details_element = driver.find_element(By.CSS_SELECTOR, f'div.details.hidden[data-marker-id="{marker_id}"]')
                             if details_element:
                                 lat = details_element.get_attribute('data-lat')
                                 lng = details_element.get_attribute('data-lng')
@@ -474,26 +483,24 @@ class HappyCowScraper:
                     except Exception as e:
                         self.logger.debug(f"Could not find hidden details element for restaurant {index+1}: {e}")
                 
-                # If still no coordinates, try to extract from page source using data-id
+                # If still no coordinates, try to extract from page source using data-marker-id
                 if not restaurant_data.get('latitude') or not restaurant_data.get('longitude'):
                     try:
-                        main_id = element.get_attribute('data-id')
-                        if main_id:
-                            # Look for coordinates in page source using the data-id
+                        marker_id = element.get_attribute('data-marker-id')
+                        if marker_id:
+                            # Look for coordinates in page source using the data-marker-id
                             page_source = driver.page_source
                             
-                            # Look for the data-id in the page source and extract coordinates from nearby elements
-                            
-                            # Pattern to find the data-id and extract coordinates from the same element or nearby
-                            pattern = rf'data-id="{main_id}"[^>]*data-lat="([^"]+)"[^>]*data-lng="([^"]+)"'
+                            # Pattern to find the data-marker-id and extract coordinates from the same element or nearby
+                            pattern = rf'data-marker-id="{marker_id}"[^>]*data-lat="([^"]+)"[^>]*data-lng="([^"]+)"'
                             match = re.search(pattern, page_source)
                             if match:
                                 restaurant_data['latitude'] = float(match.group(1))
                                 restaurant_data['longitude'] = float(match.group(2))
                                 self.logger.debug(f"Found coordinates in page source: {match.group(1)}, {match.group(2)}")
                             else:
-                                # Try alternative pattern - look for data-id followed by coordinates in the same line
-                                pattern2 = rf'data-id="{main_id}"[^>]*?data-lat="([^"]+)"[^>]*?data-lng="([^"]+)"'
+                                # Try alternative pattern - look for data-marker-id followed by coordinates in the same line
+                                pattern2 = rf'data-marker-id="{marker_id}"[^>]*?data-lat="([^"]+)"[^>]*?data-lng="([^"]+)"'
                                 match2 = re.search(pattern2, page_source, re.DOTALL)
                                 if match2:
                                     restaurant_data['latitude'] = float(match2.group(1))
