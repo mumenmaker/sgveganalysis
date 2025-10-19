@@ -3,16 +3,19 @@ import time
 import logging
 import json
 import re
+import os
 from typing import List, Dict, Optional
 from bs4 import BeautifulSoup
 from fake_useragent import UserAgent
 from config import Config
 from models import Restaurant
+from progress_tracker import ProgressTracker
 
 class HappyCowScraper:
-    def __init__(self):
+    def __init__(self, enable_resume: bool = True):
         self.session = requests.Session()
         self.ua = UserAgent()
+        self.progress_tracker = ProgressTracker() if enable_resume else None
         self.setup_logging()
         
     def setup_logging(self):
@@ -176,9 +179,23 @@ class HappyCowScraper:
             self.logger.error(f"Error parsing restaurant data: {e}")
             return None
     
-    def scrape_singapore_restaurants(self) -> List[Restaurant]:
-        """Scrape all restaurants from Singapore search results"""
+    def scrape_singapore_restaurants(self, resume: bool = True) -> List[Restaurant]:
+        """Scrape all restaurants from Singapore search results with resume support"""
         restaurants = []
+        
+        # Check if we can resume from previous session
+        if resume and self.progress_tracker:
+            resume_info = self.progress_tracker.get_resume_info()
+            if resume_info['can_resume']:
+                self.logger.info(f"Resuming previous scraping session...")
+                self.logger.info(f"Previously scraped: {resume_info['scraped_count']} restaurants")
+                self.logger.info(f"Started at: {resume_info['started_at']}")
+                self.logger.info(f"Last updated: {resume_info['last_updated']}")
+            else:
+                self.logger.info("Starting fresh scraping session")
+                self.progress_tracker.start_scraping()
+        elif self.progress_tracker:
+            self.progress_tracker.start_scraping()
         
         try:
             # Get initial search results
@@ -246,32 +263,98 @@ class HappyCowScraper:
             
             self.logger.info(f"Found {len(restaurant_data)} restaurants")
             
+            # Update progress tracker with total count
+            if self.progress_tracker:
+                self.progress_tracker.progress_data['total_restaurants'] = len(restaurant_data)
+                self.progress_tracker.save_progress()
+            
             # Process each restaurant
+            scraped_count = 0
+            failed_count = 0
+            
             for i, data in enumerate(restaurant_data):
-                self.logger.info(f"Processing restaurant {i+1}/{len(restaurant_data)}: {data.get('name', 'Unknown')}")
+                restaurant_name = data.get('name', 'Unknown')
                 
-                # Get detailed information if URL is available
-                if data.get('url'):
-                    details = self.scrape_restaurant_details(data['url'])
-                    data.update(details)
+                # Skip if already scraped (resume functionality)
+                if resume and self.progress_tracker and self.progress_tracker.is_restaurant_scraped(restaurant_name):
+                    self.logger.info(f"Skipping already scraped restaurant: {restaurant_name}")
+                    continue
                 
-                # Parse and create Restaurant object
-                restaurant = self.parse_restaurant_data(data)
-                if restaurant:
-                    restaurants.append(restaurant)
+                self.logger.info(f"Processing restaurant {i+1}/{len(restaurant_data)}: {restaurant_name}")
+                
+                try:
+                    # Get detailed information if URL is available
+                    if data.get('url'):
+                        details = self.scrape_restaurant_details(data['url'])
+                        data.update(details)
+                    
+                    # Parse and create Restaurant object
+                    restaurant = self.parse_restaurant_data(data)
+                    if restaurant:
+                        restaurants.append(restaurant)
+                        scraped_count += 1
+                        
+                        # Update progress tracker
+                        if self.progress_tracker:
+                            self.progress_tracker.add_scraped_restaurant(restaurant_name)
+                            self.progress_tracker.update_progress(scraped_count, failed_count)
+                    else:
+                        failed_count += 1
+                        self.logger.warning(f"Failed to parse restaurant: {restaurant_name}")
+                        
+                except Exception as e:
+                    failed_count += 1
+                    self.logger.error(f"Error processing restaurant {restaurant_name}: {e}")
+            
+            # Mark as completed
+            if self.progress_tracker:
+                self.progress_tracker.mark_completed()
             
             self.logger.info(f"Successfully scraped {len(restaurants)} restaurants")
+            self.logger.info(f"Failed to scrape {failed_count} restaurants")
             
         except Exception as e:
             self.logger.error(f"Error scraping restaurants: {e}")
         
         return restaurants
     
-    def save_to_json(self, restaurants: List[Restaurant], filename: str = 'singapore_restaurants.json'):
-        """Save restaurants to JSON file"""
+    def save_to_json(self, restaurants: List[Restaurant], filename: str = 'singapore_restaurants.json', append: bool = True):
+        """Save restaurants to JSON file with duplicate handling"""
         try:
+            existing_restaurants = []
+            
+            # Load existing data if appending
+            if append and os.path.exists(filename):
+                try:
+                    with open(filename, 'r', encoding='utf-8') as f:
+                        existing_data = json.load(f)
+                        existing_restaurants = [Restaurant(**item) for item in existing_data]
+                except Exception as e:
+                    self.logger.warning(f"Could not load existing JSON file: {e}")
+                    existing_restaurants = []
+            
+            # Merge with existing data, avoiding duplicates
+            all_restaurants = existing_restaurants.copy()
+            existing_names = {r.name for r in existing_restaurants}
+            
+            new_count = 0
+            duplicate_count = 0
+            
+            for restaurant in restaurants:
+                if restaurant.name not in existing_names:
+                    all_restaurants.append(restaurant)
+                    existing_names.add(restaurant.name)
+                    new_count += 1
+                else:
+                    duplicate_count += 1
+                    self.logger.info(f"Skipping duplicate in JSON: {restaurant.name}")
+            
+            # Save to file
             with open(filename, 'w', encoding='utf-8') as f:
-                json.dump([restaurant.dict() for restaurant in restaurants], f, indent=2, ensure_ascii=False)
-            self.logger.info(f"Saved {len(restaurants)} restaurants to {filename}")
+                json.dump([restaurant.dict() for restaurant in all_restaurants], f, indent=2, ensure_ascii=False)
+            
+            self.logger.info(f"JSON file updated: {new_count} new restaurants added, {duplicate_count} duplicates skipped")
+            self.logger.info(f"Total restaurants in {filename}: {len(all_restaurants)}")
+            
         except Exception as e:
             self.logger.error(f"Error saving to JSON: {e}")

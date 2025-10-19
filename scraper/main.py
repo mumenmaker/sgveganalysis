@@ -45,26 +45,35 @@ def main():
             logger.error("Failed to create database tables")
             return False
         
+        # Check for resume option
+        resume_info = scraper.progress_tracker.get_resume_info() if scraper.progress_tracker else None
+        if resume_info and resume_info['can_resume']:
+            logger.info("Previous scraping session detected. Resuming...")
+            logger.info(f"Progress: {scraper.progress_tracker.get_progress_summary()}")
+        
         # Scrape restaurants
         logger.info("Starting to scrape restaurants from HappyCow...")
-        restaurants = scraper.scrape_singapore_restaurants()
+        restaurants = scraper.scrape_singapore_restaurants(resume=True)
         
         if not restaurants:
-            logger.warning("No restaurants found. This might be due to:")
-            logger.warning("1. Website structure changes")
-            logger.warning("2. Rate limiting or blocking")
-            logger.warning("3. Network issues")
+            logger.warning("No new restaurants found. This might be due to:")
+            logger.warning("1. All restaurants already scraped (resume mode)")
+            logger.warning("2. Website structure changes")
+            logger.warning("3. Rate limiting or blocking")
+            logger.warning("4. Network issues")
             return False
         
-        logger.info(f"Successfully scraped {len(restaurants)} restaurants")
+        logger.info(f"Successfully scraped {len(restaurants)} new restaurants")
         
-        # Save to JSON file as backup
-        scraper.save_to_json(restaurants, 'singapore_restaurants.json')
+        # Save to JSON file as backup (with duplicate handling)
+        scraper.save_to_json(restaurants, 'singapore_restaurants.json', append=True)
         
-        # Insert into database
+        # Insert into database (with duplicate detection)
         logger.info("Inserting restaurants into database...")
-        if db_manager.insert_restaurants(restaurants):
-            logger.info("Successfully inserted all restaurants into database")
+        success, inserted_count, skipped_count = db_manager.insert_restaurants(restaurants, skip_duplicates=True)
+        
+        if success:
+            logger.info(f"Database update complete: {inserted_count} new restaurants inserted, {skipped_count} duplicates skipped")
         else:
             logger.error("Failed to insert restaurants into database")
             return False
@@ -113,10 +122,39 @@ def test_database_connection():
         return False
 
 if __name__ == "__main__":
-    if len(sys.argv) > 1 and sys.argv[1] == "test":
-        # Test mode
-        setup_logging()
-        test_database_connection()
+    if len(sys.argv) > 1:
+        if sys.argv[1] == "test":
+            # Test mode
+            setup_logging()
+            test_database_connection()
+        elif sys.argv[1] == "clear":
+            # Clear progress and start fresh
+            setup_logging()
+            logger = logging.getLogger(__name__)
+            from progress_tracker import ProgressTracker
+            tracker = ProgressTracker()
+            tracker.clear_progress()
+            logger.info("Progress cleared. Starting fresh scraping session...")
+            success = main()
+            sys.exit(0 if success else 1)
+        elif sys.argv[1] == "status":
+            # Show current status
+            setup_logging()
+            from progress_tracker import ProgressTracker
+            tracker = ProgressTracker()
+            print(f"Scraping Status: {tracker.get_progress_summary()}")
+            resume_info = tracker.get_resume_info()
+            if resume_info['can_resume']:
+                print(f"Can resume: Yes")
+                print(f"Last updated: {resume_info['last_updated']}")
+            else:
+                print(f"Can resume: No")
+        else:
+            print("Usage: python main.py [test|clear|status]")
+            print("  test   - Test database connection")
+            print("  clear  - Clear progress and start fresh")
+            print("  status - Show current scraping status")
+            sys.exit(1)
     else:
         # Run scraper
         success = main()

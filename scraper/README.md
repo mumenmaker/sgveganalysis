@@ -46,14 +46,34 @@ For location-based queries, enable the PostGIS extension in your Supabase projec
 ### Run the Scraper
 
 ```bash
+# Normal run (will resume if interrupted)
 python main.py
-```
 
-### Test Database Connection
+# Clear progress and start fresh
+python main.py clear
 
-```bash
+# Check scraping status
+python main.py status
+
+# Test database connection
 python main.py test
 ```
+
+### Resume Functionality
+
+The scraper automatically supports resuming interrupted scraping sessions:
+
+- **Progress tracking**: Saves progress to `scraping_progress.json`
+- **Duplicate detection**: Skips already scraped restaurants
+- **Database duplicates**: Prevents duplicate entries in Supabase
+- **JSON backup**: Merges new data with existing JSON file
+
+### Command Line Options
+
+- `python main.py` - Run scraper (resumes if interrupted)
+- `python main.py clear` - Clear progress and start fresh
+- `python main.py status` - Show current scraping status
+- `python main.py test` - Test database connection
 
 ## Database Schema
 

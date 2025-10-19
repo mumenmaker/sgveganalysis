@@ -86,34 +86,67 @@ class DatabaseManager:
             self.logger.error(f"Error creating tables: {e}")
             return False
     
-    def insert_restaurants(self, restaurants: List[Restaurant]) -> bool:
-        """Insert restaurants into Supabase database"""
+    def check_restaurant_exists(self, name: str, address: str = None) -> bool:
+        """Check if a restaurant already exists in the database"""
         if not self.supabase:
-            self.logger.error("No Supabase connection available")
             return False
         
         try:
-            # Convert restaurants to dictionaries
+            query = self.supabase.table('restaurants').select('id').eq('name', name)
+            if address:
+                query = query.eq('address', address)
+            
+            result = query.limit(1).execute()
+            return len(result.data) > 0
+        except Exception as e:
+            self.logger.error(f"Error checking restaurant existence: {e}")
+            return False
+    
+    def insert_restaurants(self, restaurants: List[Restaurant], skip_duplicates: bool = True) -> tuple:
+        """Insert restaurants into Supabase database with duplicate detection
+        
+        Returns:
+            tuple: (success: bool, inserted_count: int, skipped_count: int)
+        """
+        if not self.supabase:
+            self.logger.error("No Supabase connection available")
+            return False, 0, 0
+        
+        try:
+            inserted_count = 0
+            skipped_count = 0
             restaurant_data = []
+            
             for restaurant in restaurants:
+                # Check for duplicates if skip_duplicates is True
+                if skip_duplicates and self.check_restaurant_exists(restaurant.name, restaurant.address):
+                    self.logger.info(f"Skipping duplicate: {restaurant.name}")
+                    skipped_count += 1
+                    continue
+                
                 data = restaurant.dict()
                 # Convert datetime to string for JSON serialization
                 data['scraped_at'] = data['scraped_at'].isoformat()
                 restaurant_data.append(data)
             
+            if not restaurant_data:
+                self.logger.info("No new restaurants to insert (all were duplicates)")
+                return True, 0, skipped_count
+            
             # Insert into database
             result = self.supabase.table('restaurants').insert(restaurant_data).execute()
             
             if result.data:
-                self.logger.info(f"Successfully inserted {len(restaurant_data)} restaurants")
-                return True
+                inserted_count = len(result.data)
+                self.logger.info(f"Successfully inserted {inserted_count} restaurants, skipped {skipped_count} duplicates")
+                return True, inserted_count, skipped_count
             else:
                 self.logger.error("Failed to insert restaurants")
-                return False
+                return False, 0, skipped_count
                 
         except Exception as e:
             self.logger.error(f"Error inserting restaurants: {e}")
-            return False
+            return False, 0, skipped_count
     
     def get_restaurants(self, limit: int = 100, offset: int = 0) -> List[dict]:
         """Get restaurants from database"""

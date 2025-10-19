@@ -22,6 +22,7 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+.python-version
 
 # Virtual environments
 venv/
@@ -35,6 +36,7 @@ scraper.log
 # Data files
 *.json
 singapore_restaurants.json
+scraping_progress.json
 
 # IDE
 .vscode/
