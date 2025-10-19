@@ -27,6 +27,6 @@ class Config:
         'page': '1',
         'zoom': '11',
         'metric': 'mi',
-        'limit': '81',
         'order': 'default'
+        # Note: 'limit' parameter removed to get all restaurants (~1500)
     }

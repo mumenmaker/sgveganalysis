@@ -272,6 +272,154 @@ class HappyCowScraper:
         finally:
             self.close_selenium()
     
+    def scrape_with_selenium_paginated(self) -> List[Dict]:
+        """Scrape restaurants using Selenium with pagination to get all results"""
+        if not self.use_selenium:
+            return []
+        
+        try:
+            self.logger.info("Setting up Selenium WebDriver for paginated scraping...")
+            driver = self.setup_selenium()
+            if not driver:
+                return []
+            
+            all_restaurants = []
+            page = 1
+            max_pages = 20  # Get all pages for complete dataset (~1500 restaurants)
+            
+            while page <= max_pages:
+                self.logger.info(f"Scraping page {page}/{max_pages}...")
+                
+                # Build URL with parameters for current page
+                params = Config.SINGAPORE_PARAMS.copy()
+                params['page'] = str(page)
+                url = f"{Config.SEARCH_URL}?" + "&".join([f"{k}={v}" for k, v in params.items()])
+                
+                self.logger.info(f"Loading page {page}: {url}")
+                driver.get(url)
+                
+                # Wait for page to load
+                self.logger.info(f"Waiting for page {page} to load...")
+                time.sleep(10)
+                
+                # Find restaurant elements on this page
+                from selenium.webdriver.common.by import By
+                restaurant_elements = driver.find_elements(By.CSS_SELECTOR, '.venue-item')
+                self.logger.info(f"Found {len(restaurant_elements)} restaurant elements on page {page}")
+                
+                if not restaurant_elements:
+                    self.logger.warning(f"No restaurant elements found on page {page}")
+                    break  # No more restaurants, exit pagination
+                
+                # Extract restaurants from this page
+                page_restaurants = []
+                for i, element in enumerate(restaurant_elements):
+                    try:
+                        restaurant_data = self._extract_restaurant_data_from_element(element, i)
+                        if restaurant_data and restaurant_data.get('name'):
+                            page_restaurants.append(restaurant_data)
+                            self.logger.info(f"Extracted restaurant {i+1} from page {page}: {restaurant_data.get('name')}")
+                    except Exception as e:
+                        self.logger.warning(f"Error extracting restaurant {i+1} from page {page}: {e}")
+                        continue
+                
+                self.logger.info(f"Successfully extracted {len(page_restaurants)} restaurants from page {page}")
+                all_restaurants.extend(page_restaurants)
+                
+                # Move to next page
+                page += 1
+                
+                # Add delay between pages to be respectful
+                if page <= max_pages:
+                    self.logger.info(f"Waiting before loading page {page}...")
+                    time.sleep(5)
+            
+            self.logger.info(f"Successfully extracted {len(all_restaurants)} restaurants from {page-1} pages using paginated Selenium")
+            return all_restaurants
+            
+        except Exception as e:
+            self.logger.error(f"Error in paginated Selenium scraping: {e}")
+            return []
+        finally:
+            self.close_selenium()
+    
+    def _extract_restaurant_data_from_element(self, element, index: int) -> Dict:
+        """Extract restaurant data from a single element"""
+        try:
+            restaurant_data = {}
+            
+            # Get all text and split by lines
+            full_text = element.text.strip()
+            lines = [line.strip() for line in full_text.split('\n') if line.strip()]
+            
+            if lines:
+                restaurant_data['name'] = lines[0]  # First line is usually the name
+                
+                # Try to extract rating and review count
+                for line_idx, line in enumerate(lines):
+                    # Look for rating (usually a decimal number on its own line)
+                    if re.match(r'^\d+\.?\d*$', line) and '.' in line:
+                        try:
+                            restaurant_data['rating'] = float(line)
+                        except ValueError:
+                            pass
+                    
+                    # Look for review count in parentheses
+                    if '(' in line and ')' in line:
+                        try:
+                            review_match = re.search(r'\((\d+)\)', line)
+                            if review_match:
+                                restaurant_data['review_count'] = int(review_match.group(1))
+                        except ValueError:
+                            pass
+                
+                # Try to extract restaurant type
+                for line in lines:
+                    if any(word in line.lower() for word in ['vegan', 'vegetarian', 'veg-friendly', 'restaurant', 'cafe']):
+                        restaurant_data['type'] = line
+                        break
+                
+                # Try to extract address
+                for line in reversed(lines):
+                    if any(word in line.lower() for word in ['mi', 'km', 'miles', 'singapore', 'road', 'street', 'avenue']):
+                        restaurant_data['address'] = line
+                        break
+                
+                # Try to extract URL
+                try:
+                    from selenium.webdriver.common.by import By
+                    link_elem = element.find_element(By.CSS_SELECTOR, 'a')
+                    if link_elem:
+                        href = link_elem.get_attribute('href')
+                        if href:
+                            restaurant_data['url'] = href
+                except:
+                    pass
+                
+                # Try to extract coordinates
+                try:
+                    lat = element.get_attribute('data-lat')
+                    lng = element.get_attribute('data-lng')
+                    if lat and lng:
+                        restaurant_data['latitude'] = float(lat)
+                        restaurant_data['longitude'] = float(lng)
+                except (ValueError, TypeError):
+                    pass
+                
+                # Determine restaurant type
+                restaurant_type = restaurant_data.get('type', '').lower()
+                restaurant_data['is_vegan'] = 'vegan' in restaurant_type
+                restaurant_data['is_vegetarian'] = 'vegetarian' in restaurant_type
+                restaurant_data['has_veg_options'] = 'veg' in restaurant_type or 'friendly' in restaurant_type
+                
+                return restaurant_data
+            else:
+                return None
+                
+        except Exception as e:
+            self.logger.warning(f"Error extracting restaurant data from element {index}: {e}")
+            return None
+    
     def scrape_restaurant_details(self, restaurant_url: str) -> Dict:
         """Scrape detailed information from individual restaurant page"""
         try:
@@ -413,8 +561,8 @@ class HappyCowScraper:
         
         try:
             if self.use_selenium:
-                # Use Selenium for dynamic content
-                restaurant_data = self.scrape_with_selenium()
+                # Use Selenium for dynamic content with pagination
+                restaurant_data = self.scrape_with_selenium_paginated()
             else:
                 # Use traditional HTTP requests (likely won't work for dynamic content)
                 restaurant_data = self.scrape_with_requests()
