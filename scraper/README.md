@@ -26,7 +26,14 @@ Run the database setup script in your Supabase SQL Editor:
 
 ### 4. Run the Scraper
 ```bash
+# Run the scraper
 python main.py
+
+# Or use command-line options:
+python main.py test      # Test database connection
+python main.py clear     # Clear progress and start fresh
+python main.py clear-db  # Clear database records and progress
+python main.py status    # Show current scraping status
 ```
 
 ## Project Structure
@@ -55,6 +62,7 @@ scraper/
 - ✅ Resume functionality for interrupted scraping
 - ✅ Rate limiting and error handling
 - ✅ JSON backup of scraped data
+- ✅ Database management options (clear, status, test)
 
 ## Documentation
 

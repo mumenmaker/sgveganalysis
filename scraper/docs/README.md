@@ -114,9 +114,10 @@ The scraper automatically supports resuming interrupted scraping sessions:
 ### Command Line Options
 
 - `python main.py` - Run scraper (resumes if interrupted)
-- `python main.py clear` - Clear progress and start fresh
-- `python main.py status` - Show current scraping status
 - `python main.py test` - Test database connection
+- `python main.py clear` - Clear progress and start fresh
+- `python main.py clear-db` - Clear database records and progress
+- `python main.py status` - Show current scraping status
 
 ## Database Schema
 

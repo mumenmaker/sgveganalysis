@@ -153,11 +153,46 @@ if __name__ == "__main__":
                 print(f"Last updated: {resume_info['last_updated']}")
             else:
                 print(f"Can resume: No")
+        elif sys.argv[1] == "clear-db":
+            # Clear database records
+            setup_logging()
+            logger = logging.getLogger(__name__)
+            logger.info("Clearing database records...")
+            
+            from database import DatabaseManager
+            db_manager = DatabaseManager()
+            
+            if db_manager.supabase:
+                try:
+                    # Delete all restaurants
+                    result = db_manager.supabase.table('restaurants').delete().neq('id', 0).execute()
+                    logger.info(f"Successfully deleted all restaurant records from database")
+                    
+                    # Also clear progress
+                    from progress_tracker import ProgressTracker
+                    tracker = ProgressTracker()
+                    tracker.clear_progress()
+                    logger.info("Progress tracking also cleared")
+                    
+                    print("✅ Database cleared successfully!")
+                    print("   - All restaurant records deleted")
+                    print("   - Progress tracking cleared")
+                    print("   - Ready for fresh scraping")
+                    
+                except Exception as e:
+                    logger.error(f"Error clearing database: {e}")
+                    print(f"❌ Error clearing database: {e}")
+                    sys.exit(1)
+            else:
+                logger.error("No database connection available")
+                print("❌ No database connection available")
+                sys.exit(1)
         else:
-            print("Usage: python main.py [test|clear|status]")
-            print("  test   - Test database connection")
-            print("  clear  - Clear progress and start fresh")
-            print("  status - Show current scraping status")
+            print("Usage: python main.py [test|clear|clear-db|status]")
+            print("  test     - Test database connection")
+            print("  clear    - Clear progress and start fresh")
+            print("  clear-db - Clear database records and progress")
+            print("  status   - Show current scraping status")
             sys.exit(1)
     else:
         # Run scraper
