@@ -245,7 +245,7 @@ class DatabaseManager:
                     missing_fields.append('images_links')
                 
                 # Only include if missing at least 3 fields (more efficient)
-                if len(missing_fields) >= 3:
+                if len(missing_fields) >= 2:
                     row['missing_fields'] = missing_fields  # Add for debugging
                     incomplete_restaurants.append(row)
             
@@ -253,6 +253,58 @@ class DatabaseManager:
             
         except Exception as e:
             self.logger.error(f"Error getting incomplete restaurants: {e}")
+            return []
+
+    def get_restaurant_by_id(self, restaurant_id: int) -> List[dict]:
+        """Get a specific restaurant by ID for enhancement"""
+        if not self.supabase:
+            self.logger.error("No Supabase connection available")
+            return []
+        try:
+            # Get the specific restaurant
+            result = self.supabase.table('restaurants').select('*').eq('id', restaurant_id).execute()
+            if not result.data:
+                return []
+            
+            restaurant = result.data[0]
+            
+            # Check if it has cow_reviews link
+            if not restaurant.get('cow_reviews') or not restaurant.get('cow_reviews').strip():
+                return []
+            
+            # Check if it's missing fields (same logic as get_incomplete_restaurants)
+            missing_fields = []
+            
+            if not restaurant.get('phone') or not restaurant.get('phone').strip():
+                missing_fields.append('phone')
+            if not restaurant.get('address') or not restaurant.get('address').strip():
+                missing_fields.append('address')
+            if not restaurant.get('description') or not restaurant.get('description').strip():
+                missing_fields.append('description')
+            if not restaurant.get('category') or not restaurant.get('category').strip():
+                missing_fields.append('category')
+            if not restaurant.get('price_range') or not restaurant.get('price_range').strip():
+                missing_fields.append('price_range')
+            if not restaurant.get('rating') or restaurant.get('rating') == 0:
+                missing_fields.append('rating')
+            if not restaurant.get('review_count') or restaurant.get('review_count') == 0:
+                missing_fields.append('review_count')
+            if not restaurant.get('hours') or not restaurant.get('hours').strip():
+                missing_fields.append('hours')
+            if not restaurant.get('features') or len(restaurant.get('features', [])) == 0:
+                missing_fields.append('features')
+            if not restaurant.get('images_links') or len(restaurant.get('images_links', [])) == 0:
+                missing_fields.append('images_links')
+            
+            # Only return if missing at least 2 fields (matching the threshold)
+            if len(missing_fields) >= 2:
+                restaurant['missing_fields'] = missing_fields
+                return [restaurant]
+            else:
+                return []
+                
+        except Exception as e:
+            self.logger.error(f"Error getting restaurant by ID: {e}")
             return []
 
     def update_restaurant_fields(self, restaurant_id: int, fields: dict) -> bool:

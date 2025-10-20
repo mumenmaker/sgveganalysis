@@ -189,20 +189,29 @@ def show_scraping_statistics(restaurants: List[dict]):
     print(f"   Vegetarian restaurants: {vegetarian_count}")
     print(f"   Veg-friendly restaurants: {veg_options_count}")
 
-def enhance_restaurants(limit: int = None, start_id: int = None):
+def enhance_restaurants(limit: int = None, start_id: int = None, target_id: int = None):
     """Enhance existing rows by scraping their cow_reviews pages for missing fields"""
     print("🧩 Enhancing existing restaurant rows from cow_reviews pages...")
     if start_id:
         print(f"📍 Starting from restaurant ID: {start_id}")
+    if target_id:
+        print(f"🎯 Targeting specific restaurant ID: {target_id}")
     try:
         db = DatabaseManager()
         if not db.supabase:
             print("❌ No database connection available")
             return False
 
-        # Use a very large limit if none specified to get all rows
-        effective_limit = limit if limit is not None else 10000
-        rows = db.get_incomplete_restaurants(limit=effective_limit, start_id=start_id)
+        # Handle specific target ID
+        if target_id:
+            rows = db.get_restaurant_by_id(target_id)
+            if not rows:
+                print(f"❌ Restaurant with ID {target_id} not found or has no cow_reviews link")
+                return False
+        else:
+            # Use a very large limit if none specified to get all rows
+            effective_limit = limit if limit is not None else 10000
+            rows = db.get_incomplete_restaurants(limit=effective_limit, start_id=start_id)
         if not rows:
             print("✅ Nothing to enhance (no rows with missing fields or cow_reviews)")
             return True
@@ -229,6 +238,12 @@ def enhance_restaurants(limit: int = None, start_id: int = None):
                 if not details:
                     print(f"  ❌ Failed to fetch details")
                     continue
+                
+                # Add delay between page requests to avoid throttling/CAPTCHA
+                if i < len(rows):  # Don't delay after the last item
+                    delay = Config.ENHANCE_DELAY_BETWEEN_PAGES
+                    print(f"  ⏳ Waiting {delay}s to avoid throttling...")
+                    time.sleep(delay)
 
                 fields = {
                     'phone': details.get('phone') or r.get('phone'),
@@ -429,6 +444,7 @@ def show_help():
     print("  python main.py enhance                - Enhance all existing rows via cow_reviews page")
     print("  python main.py enhance --limit N       - Enhance only N rows (default: all rows)")
     print("  python main.py enhance --start-id N    - Start enhancement from restaurant ID N")
+    print("  python main.py enhance --id N          - Enhance specific restaurant by ID N")
     print("  python main.py enhance --limit N --start-id M  - Enhance N rows starting from ID M")
     print("  python main.py help                   - Show this help")
     print("  python main.py                        - Run full scraping (default)")
@@ -506,6 +522,7 @@ def main():
             # Parse enhance arguments
             limit = None
             start_id = None
+            target_id = None
             
             i = 2
             while i < len(sys.argv):
@@ -538,12 +555,26 @@ def main():
                     except ValueError:
                         print("❌ Invalid start-id value. Please provide a positive integer.")
                         return
+                elif arg == "--id" and i + 1 < len(sys.argv):
+                    try:
+                        target_id = int(sys.argv[i + 1])
+                        i += 2
+                    except ValueError:
+                        print("❌ Invalid id value. Please provide a positive integer.")
+                        return
+                elif arg.startswith("--id="):
+                    try:
+                        target_id = int(arg.split("=")[1])
+                        i += 1
+                    except ValueError:
+                        print("❌ Invalid id value. Please provide a positive integer.")
+                        return
                 else:
                     print(f"❌ Unknown argument: {arg}")
                     print("Use 'python main.py help' for available options")
                     return
             
-            enhance_restaurants(limit=limit, start_id=start_id)
+            enhance_restaurants(limit=limit, start_id=start_id, target_id=target_id)
             return
         elif command == "clear-db":
             # Optional flag: --include-sessions

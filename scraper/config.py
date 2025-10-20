@@ -14,6 +14,9 @@ class Config:
     MAX_RETRIES = int(os.getenv('MAX_RETRIES', '3'))
     USER_AGENT_ROTATION = os.getenv('USER_AGENT_ROTATION', 'True').lower() == 'true'
     
+    # Enhancement Configuration
+    ENHANCE_DELAY_BETWEEN_PAGES = int(os.getenv('ENHANCE_DELAY_BETWEEN_PAGES', '3'))  # Delay between page requests in seconds
+    
     # Batch Processing Configuration
     DEFAULT_BATCH_SIZE = int(os.getenv('DEFAULT_BATCH_SIZE', '20'))
     MIN_BATCH_SIZE = 5
