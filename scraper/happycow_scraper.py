@@ -1,28 +1,18 @@
-import requests
-import time
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+Clean HappyCow Scraper - Database Components Only
+Ready for new veggiemap implementation
+"""
 import logging
-import json
-import re
 import os
 from typing import List, Dict, Optional
-from bs4 import BeautifulSoup
-from fake_useragent import UserAgent
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from config import Config
 from models import Restaurant
 from progress_tracker import ProgressTracker
 
 class HappyCowScraper:
-    def __init__(self, enable_resume: bool = True, use_selenium: bool = True):
-        self.session = requests.Session()
-        self.ua = UserAgent()
+    def __init__(self, enable_resume: bool = True):
         self.progress_tracker = ProgressTracker() if enable_resume else None
-        self.use_selenium = use_selenium
-        self.driver = None
         self.setup_logging()
         
     def setup_logging(self):
@@ -40,805 +30,80 @@ class HappyCowScraper:
         )
         self.logger = logging.getLogger(__name__)
     
-    def setup_selenium(self):
-        """Setup Selenium WebDriver"""
-        if not self.use_selenium:
-            return None
-            
+    def parse_restaurant_data(self, restaurant_data: Dict) -> Optional[Restaurant]:
+        """Parse restaurant data into Restaurant model"""
         try:
-            chrome_options = Options()
-            chrome_options.add_argument('--headless')  # Run in background
-            chrome_options.add_argument('--no-sandbox')
-            chrome_options.add_argument('--disable-dev-shm-usage')
-            chrome_options.add_argument('--disable-gpu')
-            chrome_options.add_argument('--window-size=1920,1080')
-            chrome_options.add_argument('--user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36')
-            
-            self.driver = webdriver.Chrome(options=chrome_options)
-            self.driver.set_page_load_timeout(30)
-            return self.driver
-        except Exception as e:
-            self.logger.error(f"Failed to setup Selenium: {e}")
-            return None
-    
-    def close_selenium(self):
-        """Close Selenium WebDriver"""
-        if self.driver:
-            self.driver.quit()
-            self.driver = None
-    
-    def get_headers(self):
-        """Get headers with random user agent"""
-        return {
-            'User-Agent': self.ua.random,
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-            'Accept-Language': 'en-US,en;q=0.5',
-            'Accept-Encoding': 'gzip, deflate',
-            'Connection': 'keep-alive',
-            'Upgrade-Insecure-Requests': '1',
-        }
-    
-    def make_request(self, url: str, params: Dict = None, retries: int = 0) -> Optional[requests.Response]:
-        """Make HTTP request with retry logic and rate limiting"""
-        try:
-            self.logger.info(f"Making request to: {url}")
-            
-            response = self.session.get(
-                url, 
-                params=params, 
-                headers=self.get_headers(),
-                timeout=30
-            )
-            response.raise_for_status()
-            
-            # Rate limiting
-            time.sleep(Config.DELAY_BETWEEN_REQUESTS)
-            return response
-            
-        except requests.exceptions.RequestException as e:
-            self.logger.error(f"Request failed: {e}")
-            if retries < Config.MAX_RETRIES:
-                self.logger.info(f"Retrying... ({retries + 1}/{Config.MAX_RETRIES})")
-                time.sleep(2 ** retries)  # Exponential backoff
-                return self.make_request(url, params, retries + 1)
-            return None
-    
-    def scrape_with_selenium(self) -> List[Dict]:
-        """Scrape restaurants using Selenium for dynamic content"""
-        if not self.use_selenium:
-            return []
-        
-        try:
-            self.logger.info("Setting up Selenium WebDriver...")
-            driver = self.setup_selenium()
-            if not driver:
-                return []
-            
-            # Build URL with parameters
-            url = f"{Config.SEARCH_URL}?s={Config.SINGAPORE_PARAMS['s']}&location={Config.SINGAPORE_PARAMS['location']}&lat={Config.SINGAPORE_PARAMS['lat']}&lng={Config.SINGAPORE_PARAMS['lng']}&page={Config.SINGAPORE_PARAMS['page']}&zoom={Config.SINGAPORE_PARAMS['zoom']}&metric={Config.SINGAPORE_PARAMS['metric']}&limit={Config.SINGAPORE_PARAMS['limit']}&order={Config.SINGAPORE_PARAMS['order']}"
-            
-            self.logger.info(f"Loading page: {url}")
-            driver.get(url)
-            
-            # Wait for page to load and data to be populated
-            self.logger.info("Waiting for page to load...")
-            time.sleep(10)
-            
-            # Try to extract coordinates from page source (JavaScript data)
-            try:
-                page_source = driver.page_source
-                # Look for coordinate patterns in JavaScript
-                coord_patterns = [
-                    r'"lat":\s*(\d+\.\d+),\s*"lng":\s*(\d+\.\d+)',
-                    r'"latitude":\s*(\d+\.\d+),\s*"longitude":\s*(\d+\.\d+)',
-                    r'lat:\s*(\d+\.\d+),\s*lng:\s*(\d+\.\d+)',
-                    r'latitude:\s*(\d+\.\d+),\s*longitude:\s*(\d+\.\d+)'
-                ]
-                
-                page_coordinates = {}
-                for pattern in coord_patterns:
-                    matches = re.findall(pattern, page_source)
-                    if matches:
-                        self.logger.info(f"Found {len(matches)} coordinate pairs in page source")
-                        page_coordinates = {f"coord_{i}": (float(lat), float(lng)) for i, (lat, lng) in enumerate(matches)}
-                        break
-            except Exception as e:
-                self.logger.warning(f"Error extracting coordinates from page source: {e}")
-                page_coordinates = {}
-            
-            # Try to find restaurant elements using data-marker-id selector
-            restaurant_elements = driver.find_elements(By.CSS_SELECTOR, 'div[data-marker-id]')
-            self.logger.info(f"Found {len(restaurant_elements)} restaurant elements with data-marker-id")
-            
-            if not restaurant_elements:
-                self.logger.warning("No restaurant elements found with data-marker-id selector")
-                # Fallback to original selector
-                restaurant_elements = driver.find_elements(By.CSS_SELECTOR, '.venue-item')
-                self.logger.info(f"Fallback: Found {len(restaurant_elements)} restaurant elements with .venue-item")
-                if not restaurant_elements:
-                    return []
-            
-            restaurants = []
-            for i, element in enumerate(restaurant_elements):
-                try:
-                    restaurant_data = {}
-                    
-                    # Get all text and split by lines
-                    full_text = element.text.strip()
-                    lines = [line.strip() for line in full_text.split('\n') if line.strip()]
-                    
-                    if lines:
-                        restaurant_data['name'] = lines[0]  # First line is usually the name
-                        
-                        # Try to extract rating and review count
-                        for line_idx, line in enumerate(lines):
-                            # Look for rating (usually a decimal number on its own line)
-                            if re.match(r'^\d+\.?\d*$', line) and '.' in line:
-                                try:
-                                    restaurant_data['rating'] = float(line)
-                                except ValueError:
-                                    pass
-                            
-                            # Look for review count in parentheses
-                            if '(' in line and ')' in line:
-                                try:
-                                    review_match = re.search(r'\((\d+)\)', line)
-                                    if review_match:
-                                        restaurant_data['review_count'] = int(review_match.group(1))
-                                except ValueError:
-                                    pass
-                        
-                        # Try to extract restaurant type
-                        for line in lines:
-                            if any(word in line.lower() for word in ['vegan', 'vegetarian', 'veg-friendly', 'restaurant', 'cafe']):
-                                restaurant_data['type'] = line
-                                break
-                        
-                        # Try to extract address (usually the last line with location info)
-                        for line in reversed(lines):
-                            if any(word in line.lower() for word in ['mi', 'km', 'miles', 'singapore', 'road', 'street', 'avenue']):
-                                restaurant_data['address'] = line
-                                break
-                        
-                        # Try to extract URL
-                        try:
-                            link_elem = element.find_element(By.CSS_SELECTOR, 'a')
-                            if link_elem:
-                                href = link_elem.get_attribute('href')
-                                if href:
-                                    restaurant_data['url'] = href
-                        except:
-                            pass
-                        
-                        # Try to extract coordinates from data attributes on the main element
-                        try:
-                            lat = element.get_attribute('data-lat')
-                            lng = element.get_attribute('data-lng')
-                            if lat and lng:
-                                restaurant_data['latitude'] = float(lat)
-                                restaurant_data['longitude'] = float(lng)
-                        except (ValueError, TypeError):
-                            pass
-                        
-                        # If coordinates not found on main element, look for details element with same data-id
-                        if not restaurant_data.get('latitude') or not restaurant_data.get('longitude'):
-                            try:
-                                # Get the data-id from the main element
-                                main_id = element.get_attribute('data-id')
-                                if main_id:
-                                    # Look for details element with same data-id
-                                    details_element = driver.find_element(By.CSS_SELECTOR, f'div.details.hidden[data-id="{main_id}"]')
-                                    if details_element:
-                                        lat = details_element.get_attribute('data-lat')
-                                        lng = details_element.get_attribute('data-lng')
-                                        if lat and lng:
-                                            restaurant_data['latitude'] = float(lat)
-                                            restaurant_data['longitude'] = float(lng)
-                                            self.logger.debug(f"Found coordinates in details element: {lat}, {lng}")
-                            except Exception as e:
-                                self.logger.debug(f"Could not find details element for restaurant {i+1}: {e}")
-                        
-                        # Try to extract coordinates from other data attributes
-                        try:
-                            # Check for common coordinate attribute names
-                            for attr in ['data-latitude', 'data-longitude', 'data-coords', 'data-location']:
-                                value = element.get_attribute(attr)
-                                if value:
-                                    # Try to parse coordinate pairs
-                                    coord_match = re.search(r'(\d+\.\d+),\s*(\d+\.\d+)', value)
-                                    if coord_match:
-                                        restaurant_data['latitude'] = float(coord_match.group(1))
-                                        restaurant_data['longitude'] = float(coord_match.group(2))
-                                        break
-                        except (ValueError, TypeError):
-                            pass
-                        
-                        # Determine restaurant type
-                        restaurant_type = restaurant_data.get('type', '').lower()
-                        restaurant_data['is_vegan'] = 'vegan' in restaurant_type
-                        restaurant_data['is_vegetarian'] = 'vegetarian' in restaurant_type
-                        restaurant_data['has_veg_options'] = 'veg' in restaurant_type or 'friendly' in restaurant_type
-                        
-                        if restaurant_data.get('name'):
-                            restaurants.append(restaurant_data)
-                            self.logger.info(f"Extracted restaurant {i+1}: {restaurant_data.get('name')}")
-                
-                except Exception as e:
-                    self.logger.warning(f"Error extracting restaurant {i+1}: {e}")
-                    continue
-            
-            self.logger.info(f"Successfully extracted {len(restaurants)} restaurants using Selenium")
-            return restaurants
-            
-        except Exception as e:
-            self.logger.error(f"Error in Selenium scraping: {e}")
-            return []
-        finally:
-            self.close_selenium()
-    
-    def scrape_with_selenium_paginated(self, max_pages: int = 50) -> List[Dict]:
-        """Scrape restaurants using Selenium with pagination to get all results"""
-        if not self.use_selenium:
-            return []
-        
-        try:
-            self.logger.info("Setting up Selenium WebDriver for paginated scraping...")
-            driver = self.setup_selenium()
-            if not driver:
-                return []
-            
-            all_restaurants = []
-            page = 1
-            
-            while page <= max_pages:
-                self.logger.info(f"Scraping page {page}/{max_pages}...")
-                
-                # Build URL with parameters for current page
-                params = Config.SINGAPORE_PARAMS.copy()
-                params['page'] = str(page)
-                url = f"{Config.SEARCH_URL}?" + "&".join([f"{k}={v}" for k, v in params.items()])
-                
-                self.logger.info(f"Loading page {page}: {url}")
-                driver.get(url)
-                
-                # Wait for page to load and coordinates to be populated
-                self.logger.info(f"Waiting for page {page} to load...")
-                time.sleep(15)  # Increased wait time for coordinates to load
-                
-                # Find restaurant elements on this page using data-marker-id
-                from selenium.webdriver.common.by import By
-                restaurant_elements = driver.find_elements(By.CSS_SELECTOR, 'div[data-marker-id]')
-                self.logger.info(f"Found {len(restaurant_elements)} restaurant elements with data-marker-id on page {page}")
-                
-                if not restaurant_elements:
-                    self.logger.warning(f"No restaurant elements found with data-marker-id on page {page}")
-                    # Fallback to original selector
-                    restaurant_elements = driver.find_elements(By.CSS_SELECTOR, '.venue-item')
-                    self.logger.info(f"Fallback: Found {len(restaurant_elements)} restaurant elements with .venue-item on page {page}")
-                    if not restaurant_elements:
-                        self.logger.warning(f"No restaurant elements found on page {page}")
-                        break  # No more restaurants, exit pagination
-                
-                # Extract restaurants from this page
-                page_restaurants = []
-                for i, element in enumerate(restaurant_elements):
-                    try:
-                        restaurant_data = self._extract_restaurant_data_from_element(element, i, driver)
-                        if restaurant_data and restaurant_data.get('name'):
-                            page_restaurants.append(restaurant_data)
-                            self.logger.info(f"Extracted restaurant {i+1} from page {page}: {restaurant_data.get('name')}")
-                    except Exception as e:
-                        self.logger.warning(f"Error extracting restaurant {i+1} from page {page}: {e}")
-                        continue
-                
-                self.logger.info(f"Successfully extracted {len(page_restaurants)} restaurants from page {page}")
-                all_restaurants.extend(page_restaurants)
-                
-                # Insert restaurants from this page into database immediately
-                if page_restaurants:
-                    try:
-                        from database import DatabaseManager
-                        db_manager = DatabaseManager()
-                        if db_manager.supabase:
-                            # Convert to Restaurant objects
-                            page_restaurant_objects = []
-                            for data in page_restaurants:
-                                restaurant = self.parse_restaurant_data(data)
-                                if restaurant:
-                                    page_restaurant_objects.append(restaurant)
-                            
-                            if page_restaurant_objects:
-                                # Insert into database (let database handle duplicates via unique constraint)
-                                success, inserted_count, skipped_count = db_manager.insert_restaurants(page_restaurant_objects, skip_duplicates=False)
-                                if success:
-                                    self.logger.info(f"Inserted {inserted_count} restaurants from page {page}, skipped {skipped_count} duplicates")
-                                else:
-                                    self.logger.warning(f"Failed to insert restaurants from page {page}")
-                            
-                            # DatabaseManager doesn't need explicit connection closing
-                    except Exception as e:
-                        self.logger.error(f"Error inserting restaurants from page {page}: {e}")
-                
-                # If no restaurants were extracted from this page, we've likely reached the end
-                if len(page_restaurants) == 0:
-                    self.logger.info(f"No restaurants extracted from page {page}, stopping pagination")
-                    break
-                
-                # Move to next page
-                page += 1
-                
-                # Add delay between pages to be respectful
-                if page <= max_pages:
-                    self.logger.info(f"Waiting before loading page {page}...")
-                    time.sleep(5)
-            
-            self.logger.info(f"Successfully extracted {len(all_restaurants)} restaurants from {page-1} pages using paginated Selenium")
-            return all_restaurants
-            
-        except Exception as e:
-            self.logger.error(f"Error in paginated Selenium scraping: {e}")
-            return []
-        finally:
-            self.close_selenium()
-    
-    def _extract_restaurant_data_from_element(self, element, index: int, driver=None) -> Dict:
-        """Extract restaurant data from a single element"""
-        import re  # Import re at the beginning of the method
-        
-        try:
-            restaurant_data = {}
-            
-            # Get all text and split by lines
-            full_text = element.text.strip()
-            lines = [line.strip() for line in full_text.split('\n') if line.strip()]
-            
-            # If no text content, try to find restaurant name in child elements
-            if not lines:
-                try:
-                    from selenium.webdriver.common.by import By
-                    # Look for common restaurant name selectors
-                    name_selectors = ['h3', 'h4', '.name', '.title', '.restaurant-name', 'a', '.venue-name']
-                    for selector in name_selectors:
-                        try:
-                            name_elem = element.find_element(By.CSS_SELECTOR, selector)
-                            if name_elem and name_elem.text.strip():
-                                restaurant_data['name'] = name_elem.text.strip()
-                                break
-                        except:
-                            continue
-                    
-                    # If still no name, try to get it from the first child element with text
-                    if not restaurant_data.get('name'):
-                        children = element.find_elements(By.XPATH, "./*")
-                        for child in children:
-                            if child.text.strip():
-                                restaurant_data['name'] = child.text.strip()
-                                break
-                except Exception as e:
-                    self.logger.debug(f"Could not extract name from child elements: {e}")
-
-            if lines:
-                restaurant_data['name'] = lines[0]  # First line is usually the name
-                
-                # Try to extract rating and review count
-                for line_idx, line in enumerate(lines):
-                    # Look for rating (usually a decimal number on its own line)
-                    if re.match(r'^\d+\.?\d*$', line) and '.' in line:
-                        try:
-                            restaurant_data['rating'] = float(line)
-                        except ValueError:
-                            pass
-                    
-                    # Look for review count in parentheses
-                    if '(' in line and ')' in line:
-                        try:
-                            review_match = re.search(r'\((\d+)\)', line)
-                            if review_match:
-                                restaurant_data['review_count'] = int(review_match.group(1))
-                        except ValueError:
-                            pass
-                
-                # Try to extract restaurant type
-                for line in lines:
-                    if any(word in line.lower() for word in ['vegan', 'vegetarian', 'veg-friendly', 'restaurant', 'cafe']):
-                        restaurant_data['type'] = line
-                        break
-                
-                # Try to extract address
-                for line in reversed(lines):
-                    if any(word in line.lower() for word in ['mi', 'km', 'miles', 'singapore', 'road', 'street', 'avenue']):
-                        restaurant_data['address'] = line
-                        break
-                
-                # Try to extract URL
-                try:
-                    from selenium.webdriver.common.by import By
-                    link_elem = element.find_element(By.CSS_SELECTOR, 'a')
-                    if link_elem:
-                        href = link_elem.get_attribute('href')
-                        if href:
-                            restaurant_data['url'] = href
-                except:
-                    pass
-                
-                
-                # If coordinates not found on main element, look for details element by position
-                if not restaurant_data.get('latitude') or not restaurant_data.get('longitude'):
-                    try:
-                        # Get all hidden details elements
-                        from selenium.webdriver.common.by import By
-                        hidden_details = driver.find_elements(By.CSS_SELECTOR, 'div.details.hidden')
-                        
-                        # Use the index to match with the corresponding hidden details element
-                        if index < len(hidden_details):
-                            details_element = hidden_details[index]
-                            lat = details_element.get_attribute('data-lat')
-                            lng = details_element.get_attribute('data-lng')
-                            if lat and lng:
-                                restaurant_data['latitude'] = float(lat)
-                                restaurant_data['longitude'] = float(lng)
-                                self.logger.debug(f"Found coordinates in details element by position: {lat}, {lng}")
-                    except Exception as e:
-                        self.logger.debug(f"Could not find details element for restaurant {index+1}: {e}")
-                
-                # If still no coordinates, look for any hidden details elements with coordinates
-                if not restaurant_data.get('latitude') or not restaurant_data.get('longitude'):
-                    try:
-                        from selenium.webdriver.common.by import By
-                        # Look for any hidden details elements that have coordinates
-                        hidden_details = driver.find_elements(By.CSS_SELECTOR, 'div.details.hidden[data-lat][data-lng]')
-                        if hidden_details:
-                            # Use the first one found (we can improve this later to match by restaurant name or other criteria)
-                            details_element = hidden_details[0]
-                            lat = details_element.get_attribute('data-lat')
-                            lng = details_element.get_attribute('data-lng')
-                            if lat and lng:
-                                restaurant_data['latitude'] = float(lat)
-                                restaurant_data['longitude'] = float(lng)
-                                self.logger.debug(f"Found coordinates in hidden details element: {lat}, {lng}")
-                    except Exception as e:
-                        self.logger.debug(f"Could not find hidden details element for restaurant {index+1}: {e}")
-                
-                # If still no coordinates, try to extract from page source using data-marker-id
-                if not restaurant_data.get('latitude') or not restaurant_data.get('longitude'):
-                    try:
-                        marker_id = element.get_attribute('data-marker-id')
-                        if marker_id:
-                            # Look for coordinates in page source using the data-marker-id
-                            page_source = driver.page_source
-                            
-                            # Pattern to find the data-marker-id and extract coordinates from the same element or nearby
-                            pattern = rf'data-marker-id="{marker_id}"[^>]*data-lat="([^"]+)"[^>]*data-lng="([^"]+)"'
-                            match = re.search(pattern, page_source)
-                            if match:
-                                restaurant_data['latitude'] = float(match.group(1))
-                                restaurant_data['longitude'] = float(match.group(2))
-                                self.logger.debug(f"Found coordinates in page source: {match.group(1)}, {match.group(2)}")
-                            else:
-                                # Try alternative pattern - look for data-marker-id followed by coordinates in the same line
-                                pattern2 = rf'data-marker-id="{marker_id}"[^>]*?data-lat="([^"]+)"[^>]*?data-lng="([^"]+)"'
-                                match2 = re.search(pattern2, page_source, re.DOTALL)
-                                if match2:
-                                    restaurant_data['latitude'] = float(match2.group(1))
-                                    restaurant_data['longitude'] = float(match2.group(2))
-                                    self.logger.debug(f"Found coordinates in page source (alt pattern): {match2.group(1)}, {match2.group(2)}")
-                    except Exception as e:
-                        self.logger.debug(f"Could not extract coordinates from page source for restaurant {index+1}: {e}")
-                
-                # Try to extract coordinates from other data attributes
-                try:
-                    # Check for common coordinate attribute names
-                    for attr in ['data-latitude', 'data-longitude', 'data-coords', 'data-location']:
-                        value = element.get_attribute(attr)
-                        if value:
-                            # Try to parse coordinate pairs
-                            coord_match = re.search(r'(\d+\.\d+),\s*(\d+\.\d+)', value)
-                            if coord_match:
-                                restaurant_data['latitude'] = float(coord_match.group(1))
-                                restaurant_data['longitude'] = float(coord_match.group(2))
-                                break
-                except (ValueError, TypeError):
-                    pass
-                
-                # Determine restaurant type
-                restaurant_type = restaurant_data.get('type', '').lower()
-                restaurant_data['is_vegan'] = 'vegan' in restaurant_type
-                restaurant_data['is_vegetarian'] = 'vegetarian' in restaurant_type
-                restaurant_data['has_veg_options'] = 'veg' in restaurant_type or 'friendly' in restaurant_type
-                
-                return restaurant_data
-            else:
+            if not restaurant_data or not restaurant_data.get('name'):
                 return None
                 
-        except Exception as e:
-            self.logger.warning(f"Error extracting restaurant data from element {index}: {e}")
-            return None
-    
-    def scrape_restaurant_details(self, restaurant_url: str) -> Dict:
-        """Scrape detailed information from individual restaurant page"""
-        try:
-            response = self.make_request(restaurant_url)
-            if not response:
-                return {}
-            
-            soup = BeautifulSoup(response.content, 'html.parser')
-            details = {}
-            
-            # Extract address
-            address_elem = soup.find('div', class_='address')
-            if address_elem:
-                details['address'] = address_elem.get_text(strip=True)
-            
-            # Extract phone
-            phone_elem = soup.find('div', class_='phone')
-            if phone_elem:
-                details['phone'] = phone_elem.get_text(strip=True)
-            
-            # Extract website
-            website_elem = soup.find('a', class_='website')
-            if website_elem:
-                details['website'] = website_elem.get('href')
-            
-            # Extract description
-            desc_elem = soup.find('div', class_='description')
-            if desc_elem:
-                details['description'] = desc_elem.get_text(strip=True)
-            
-            # Extract hours
-            hours_elem = soup.find('div', class_='hours')
-            if hours_elem:
-                details['hours'] = hours_elem.get_text(strip=True)
-            
-            # Extract features
-            features = []
-            feature_elems = soup.find_all('span', class_='feature')
-            for elem in feature_elems:
-                features.append(elem.get_text(strip=True))
-            details['features'] = features
-            
-            return details
-            
-        except Exception as e:
-            self.logger.error(f"Error scraping restaurant details: {e}")
-            return {}
-    
-    def parse_restaurant_data(self, restaurant_data: Dict) -> Restaurant:
-        """Parse restaurant data from search results"""
-        try:
-            # Check if restaurant_data is valid
-            if not restaurant_data or not isinstance(restaurant_data, dict):
-                return None
-            
-            # Extract basic information
-            name = restaurant_data.get('name', '')
-            
-            # Check if we have at least a name
-            if not name or not name.strip():
-                return None
-            
-            # Debug logging for coordinates
-            lat = restaurant_data.get('latitude')
-            lng = restaurant_data.get('longitude')
-            self.logger.debug(f"Parsing restaurant {name}: lat={lat}, lng={lng}")
-            address = restaurant_data.get('address', '')
-            phone = restaurant_data.get('phone', '')
-            website = restaurant_data.get('website', '')
-            description = restaurant_data.get('description', '')
-            
             # Extract coordinates
             lat = restaurant_data.get('latitude')
             lng = restaurant_data.get('longitude')
             latitude = float(lat) if lat else None
             longitude = float(lng) if lng else None
             
-            # Extract rating and review count
-            rating = restaurant_data.get('rating')
-            review_count = restaurant_data.get('review_count')
-            
-            # Determine restaurant type
-            restaurant_type = restaurant_data.get('type', '').lower()
-            is_vegan = 'vegan' in restaurant_type
-            is_vegetarian = 'vegetarian' in restaurant_type
-            has_veg_options = 'veg' in restaurant_type or 'friendly' in restaurant_type
-            
-            # Extract cuisine type
-            cuisine_type = restaurant_data.get('cuisine', '')
-            
-            # Extract price range
-            price_range = restaurant_data.get('price_range', '')
-            
-            # Extract features
-            features = restaurant_data.get('features', [])
-            
-            # Extract hours
-            hours = restaurant_data.get('hours', '')
-            
-            # HappyCow URL
-            happycow_url = restaurant_data.get('url', '')
-            
-            return Restaurant(
-                name=name,
-                address=address,
-                phone=phone,
-                website=website,
-                description=description,
-                cuisine_type=cuisine_type,
-                price_range=price_range,
-                rating=rating,
-                review_count=review_count,
+            # Create Restaurant object
+            restaurant = Restaurant(
+                name=restaurant_data.get('name', ''),
+                address=restaurant_data.get('address', ''),
+                phone=restaurant_data.get('phone', ''),
+                website=restaurant_data.get('website', ''),
+                description=restaurant_data.get('description', ''),
+                cuisine_type=restaurant_data.get('cuisine_type', ''),
+                price_range=restaurant_data.get('price_range', ''),
+                rating=restaurant_data.get('rating'),
+                review_count=restaurant_data.get('review_count'),
+                is_vegan=restaurant_data.get('is_vegan', False),
+                is_vegetarian=restaurant_data.get('is_vegetarian', False),
+                has_veg_options=restaurant_data.get('has_veg_options', False),
                 latitude=latitude,
                 longitude=longitude,
-                is_vegan=is_vegan,
-                is_vegetarian=is_vegetarian,
-                has_veg_options=has_veg_options,
-                features=features,
-                hours=hours,
-                happycow_url=happycow_url
+                features=restaurant_data.get('features', []),
+                hours=restaurant_data.get('hours', ''),
+                happycow_url=restaurant_data.get('url', '')
             )
+            
+            return restaurant
             
         except Exception as e:
             self.logger.error(f"Error parsing restaurant data: {e}")
             return None
     
-    def scrape_singapore_restaurants(self, resume: bool = True, max_pages: int = 50) -> List[Restaurant]:
-        """Scrape all restaurants from Singapore search results with resume support"""
-        restaurants = []
-        
-        # Check if we can resume from previous session
-        if resume and self.progress_tracker:
-            resume_info = self.progress_tracker.get_resume_info()
-            if resume_info['can_resume']:
-                self.logger.info(f"Resuming previous scraping session...")
-                self.logger.info(f"Previously scraped: {resume_info['scraped_count']} restaurants")
-                self.logger.info(f"Started at: {resume_info['started_at']}")
-                self.logger.info(f"Last updated: {resume_info['last_updated']}")
-            else:
-                self.logger.info("Starting fresh scraping session")
-                self.progress_tracker.start_scraping()
-        elif self.progress_tracker:
-            self.progress_tracker.start_scraping()
-        
-        try:
-            if self.use_selenium:
-                # Use Selenium for dynamic content with pagination
-                restaurant_data = self.scrape_with_selenium_paginated(max_pages)
-            else:
-                # Use traditional HTTP requests (likely won't work for dynamic content)
-                restaurant_data = self.scrape_with_requests()
-            
-            if not restaurant_data:
-                self.logger.error("No restaurant data found")
-                return restaurants
-            
-            self.logger.info(f"Found {len(restaurant_data)} restaurants")
-            
-            # Update progress tracker with total count
-            if self.progress_tracker:
-                self.progress_tracker.progress_data['total_restaurants'] = len(restaurant_data)
-                self.progress_tracker.save_progress()
-            
-            # Process each restaurant
-            scraped_count = 0
-            failed_count = 0
-            
-            for i, data in enumerate(restaurant_data):
-                restaurant_name = data.get('name', 'Unknown')
-                
-                # Skip if already scraped (resume functionality)
-                if resume and self.progress_tracker and self.progress_tracker.is_restaurant_scraped(restaurant_name):
-                    self.logger.info(f"Skipping already scraped restaurant: {restaurant_name}")
-                    continue
-                
-                self.logger.info(f"Processing restaurant {i+1}/{len(restaurant_data)}: {restaurant_name}")
-                
-                try:
-                    # Preserve coordinates before updating with details
-                    original_latitude = data.get('latitude')
-                    original_longitude = data.get('longitude')
-                    self.logger.debug(f"Original coordinates for {restaurant_name}: lat={original_latitude}, lng={original_longitude}")
-                    
-                    # Skip individual detail scraping to avoid 403 errors
-                    # We already have all necessary data from Selenium scraping
-                    self.logger.debug(f"Using data from Selenium scraping for {restaurant_name}: lat={original_latitude}, lng={original_longitude}")
-                    
-                    # Parse and create Restaurant object
-                    restaurant = self.parse_restaurant_data(data)
-                    if restaurant:
-                        restaurants.append(restaurant)
-                        scraped_count += 1
-                        
-                        # Update progress tracker
-                        if self.progress_tracker:
-                            self.progress_tracker.add_scraped_restaurant(restaurant_name)
-                            self.progress_tracker.update_progress(scraped_count, failed_count)
-                    else:
-                        failed_count += 1
-                        self.logger.warning(f"Failed to parse restaurant: {restaurant_name}")
-                        
-                except Exception as e:
-                    failed_count += 1
-                    self.logger.error(f"Error processing restaurant {restaurant_name}: {e}")
-            
-            # Mark as completed
-            if self.progress_tracker:
-                self.progress_tracker.mark_completed()
-            
-            self.logger.info(f"Successfully scraped {len(restaurants)} restaurants")
-            self.logger.info(f"Failed to scrape {failed_count} restaurants")
-            
-        except Exception as e:
-            self.logger.error(f"Error scraping restaurants: {e}")
-        
-        return restaurants
-    
-    def scrape_with_requests(self) -> List[Dict]:
-        """Scrape using traditional HTTP requests (for static content)"""
-        try:
-            response = self.make_request(Config.SEARCH_URL, Config.SINGAPORE_PARAMS)
-            if not response:
-                return []
-            
-            soup = BeautifulSoup(response.content, 'html.parser')
-            restaurant_data = []
-            
-            # Look for restaurant data in script tags
-            script_tags = soup.find_all('script', type='text/javascript')
-            for script in script_tags:
-                if script.string and 'restaurants' in script.string:
-                    try:
-                        json_match = re.search(r'var\s+restaurants\s*=\s*(\[.*?\]);', script.string, re.DOTALL)
-                        if json_match:
-                            json_str = json_match.group(1)
-                            restaurant_data = json.loads(json_str)
-                            break
-                    except (json.JSONDecodeError, AttributeError):
-                        continue
-            
-            return restaurant_data
-            
-        except Exception as e:
-            self.logger.error(f"Error in requests scraping: {e}")
-            return []
-    
     def save_to_json(self, restaurants: List[Restaurant], filename: str = 'logs/singapore_restaurants.json', append: bool = True):
-        """Save restaurants to JSON file with duplicate handling"""
+        """Save restaurants to JSON file"""
         try:
             # Ensure logs directory exists
             os.makedirs('logs', exist_ok=True)
-            existing_restaurants = []
             
-            # Load existing data if appending
+            # Convert restaurants to dictionaries
+            restaurant_dicts = [restaurant.model_dump() for restaurant in restaurants]
+            
             if append and os.path.exists(filename):
+                # Load existing data
                 try:
                     with open(filename, 'r', encoding='utf-8') as f:
                         existing_data = json.load(f)
-                        existing_restaurants = [Restaurant(**item) for item in existing_data]
-                except Exception as e:
-                    self.logger.warning(f"Could not load existing JSON file: {e}")
-                    existing_restaurants = []
-            
-            # Merge with existing data, avoiding duplicates
-            all_restaurants = existing_restaurants.copy()
-            existing_names = {r.name for r in existing_restaurants}
-            
-            new_count = 0
-            duplicate_count = 0
-            
-            for restaurant in restaurants:
-                if restaurant.name not in existing_names:
-                    all_restaurants.append(restaurant)
-                    existing_names.add(restaurant.name)
-                    new_count += 1
-                else:
-                    duplicate_count += 1
-                    self.logger.info(f"Skipping duplicate in JSON: {restaurant.name}")
+                except:
+                    existing_data = []
+                
+                # Add new restaurants, avoiding duplicates
+                existing_names = {r.get('name') for r in existing_data}
+                new_restaurants = [r for r in restaurant_dicts if r.get('name') not in existing_names]
+                restaurant_dicts = existing_data + new_restaurants
             
             # Save to file
             with open(filename, 'w', encoding='utf-8') as f:
-                json.dump([restaurant.model_dump() for restaurant in all_restaurants], f, indent=2, ensure_ascii=False)
+                json.dump(restaurant_dicts, f, indent=2, ensure_ascii=False, default=str)
             
-            self.logger.info(f"JSON file updated: {new_count} new restaurants added, {duplicate_count} duplicates skipped")
-            self.logger.info(f"Total restaurants in {filename}: {len(all_restaurants)}")
+            self.logger.info(f"Saved {len(restaurant_dicts)} restaurants to {filename}")
             
         except Exception as e:
             self.logger.error(f"Error saving to JSON: {e}")
+    
+    def scrape_singapore_restaurants(self, resume: bool = True, max_pages: int = 50) -> List[Restaurant]:
+        """
+        Main scraping method - TO BE IMPLEMENTED
+        This will be replaced with the new veggiemap scraper
+        """
+        self.logger.info("Scraping method not yet implemented - ready for new veggiemap implementation")
+        return []

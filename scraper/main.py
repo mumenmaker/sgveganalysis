@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-HappyCow Singapore Restaurant Scraper
-Scrapes restaurant data from HappyCow and stores it in Supabase database
+HappyCow Singapore Restaurant Scraper - Clean Version
+Ready for new veggiemap implementation
 """
 
 import logging
@@ -18,7 +18,7 @@ def setup_logging():
     os.makedirs('logs', exist_ok=True)
     
     logging.basicConfig(
-        level=logging.DEBUG,
+        level=logging.INFO,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         handlers=[
             logging.FileHandler('logs/scraper.log'),
@@ -26,23 +26,28 @@ def setup_logging():
         ]
     )
 
+def test_database_connection():
+    """Test database connection"""
+    print("🔍 Testing database connection...")
+    
+    try:
+        db_manager = DatabaseManager()
+        if db_manager.supabase:
+            print("✅ Database connection successful!")
+            return True
+        else:
+            print("❌ Database connection failed")
+            return False
+    except Exception as e:
+        print(f"❌ Database connection error: {e}")
+        return False
+
 def main():
     """Main function to run the scraper"""
     setup_logging()
     logger = logging.getLogger(__name__)
     
-    # Add signal handler for graceful shutdown
-    import signal
-    def signal_handler(sig, frame):
-        logger.info("Received interrupt signal. Saving progress...")
-        # The scraper will handle saving progress in its exception handling
-        sys.exit(0)
-    
-    signal.signal(signal.SIGINT, signal_handler)
-    signal.signal(signal.SIGTERM, signal_handler)
-    
     # Parse command line arguments
-    max_pages = 50  # Default value
     if len(sys.argv) > 1:
         if sys.argv[1] == "test":
             test_database_connection()
@@ -78,28 +83,14 @@ def main():
                     tracker.clear_progress()
                     logger.info("Progress tracking also cleared")
 
-                    # Clear log files and progress files
-                    import os
-                    import glob
-                    
                     # Remove log files
-                    log_files = [
-                        'logs/scraper.log',
-                        'logs/scraping_progress.json',
-                        'logs/singapore_restaurants.json'
-                    ]
-                    
-                    for log_file in log_files:
-                        if os.path.exists(log_file):
-                            os.remove(log_file)
-                            logger.info(f"Removed {log_file}")
-                    
-                    # Remove any other log files in logs directory
-                    for log_file in glob.glob('logs/*.log'):
-                        if os.path.exists(log_file):
-                            os.remove(log_file)
-                            logger.info(f"Removed {log_file}")
-                    
+                    log_dir = 'logs'
+                    if os.path.exists(log_dir):
+                        for filename in os.listdir(log_dir):
+                            file_path = os.path.join(log_dir, filename)
+                            if os.path.isfile(file_path) and (filename.endswith('.log') or filename.endswith('.json')):
+                                os.remove(file_path)
+                                logger.info(f"Removed {file_path}")
                     logger.info("Log files and progress files cleared")
 
                     print("✅ Database cleared successfully!")
@@ -136,17 +127,8 @@ def main():
             else:
                 print("📊 No active scraping session found")
             return
-        elif sys.argv[1].isdigit():
-            # First argument is max_pages
-            max_pages = int(sys.argv[1])
-            logger.info(f"Using max_pages: {max_pages}")
-        elif len(sys.argv) > 2 and sys.argv[2].isdigit():
-            # Second argument is max_pages
-            max_pages = int(sys.argv[2])
-            logger.info(f"Using max_pages: {max_pages}")
     
     logger.info("Starting HappyCow Singapore Restaurant Scraper")
-    logger.info(f"Max pages to scrape: {max_pages}")
     
     try:
         # Initialize scraper and database
@@ -173,19 +155,15 @@ def main():
         
         # Scrape restaurants
         logger.info("Starting to scrape restaurants from HappyCow...")
-        restaurants = scraper.scrape_singapore_restaurants(resume=True, max_pages=max_pages)
+        restaurants = scraper.scrape_singapore_restaurants(resume=True)
         
         if not restaurants:
-            logger.warning("No new restaurants found. This might be due to:")
-            logger.warning("1. All restaurants already scraped (resume mode)")
-            logger.warning("2. Website structure changes")
-            logger.warning("3. Rate limiting or blocking")
-            logger.warning("4. Network issues")
+            logger.warning("No restaurants found. Scraper implementation pending.")
             return False
         
-        logger.info(f"Successfully scraped {len(restaurants)} new restaurants")
+        logger.info(f"Successfully scraped {len(restaurants)} restaurants")
         
-        # Save to JSON file as backup (with duplicate handling)
+        # Save to JSON file as backup
         scraper.save_to_json(restaurants, 'logs/singapore_restaurants.json', append=True)
         
         # Display summary
@@ -208,27 +186,6 @@ def main():
         return False
     except Exception as e:
         logger.error(f"Unexpected error: {e}")
-        return False
-
-def test_database_connection():
-    """Test database connection and basic operations"""
-    logger = logging.getLogger(__name__)
-    
-    try:
-        db_manager = DatabaseManager()
-        
-        if not db_manager.supabase:
-            logger.error("Database connection failed")
-            return False
-        
-        # Test basic query
-        restaurants = db_manager.get_restaurants(limit=5)
-        logger.info(f"Database connection successful. Found {len(restaurants)} restaurants in database")
-        
-        return True
-        
-    except Exception as e:
-        logger.error(f"Database test failed: {e}")
         return False
 
 if __name__ == "__main__":

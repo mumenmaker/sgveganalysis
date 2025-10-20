@@ -16,17 +16,12 @@ class Config:
     
     # HappyCow URLs
     BASE_URL = "https://www.happycow.net"
-    SEARCH_URL = "https://www.happycow.net/searchmap"
+    VEGGIEMAP_URL = "https://www.happycow.net/veggiemap"
     
-    # Singapore specific parameters
-    SINGAPORE_PARAMS = {
-        's': '3',
-        'location': 'Central Singapore, Singapore',
-        'lat': '1.34183',
-        'lng': '103.861',
-        'page': '1',
+    # Singapore veggiemap parameters
+    SINGAPORE_VEGGIEMAP_PARAMS = {
+        'location': 'singapore',
         'zoom': '11',
-        'metric': 'mi',
-        'order': 'default'
-        # Note: 'limit' parameter removed to get all restaurants (~1500)
+        'clat': '1.351188231529612',
+        'clng': '103.8091278076172'
     }
