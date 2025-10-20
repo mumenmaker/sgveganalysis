@@ -238,8 +238,8 @@ class DatabaseManager:
                 if not row.get('images_links') or len(row.get('images_links', [])) == 0:
                     missing_fields.append('images_links')
                 
-                # Only include if missing at least one field
-                if missing_fields:
+                # Only include if missing at least 3 fields (more efficient)
+                if len(missing_fields) >= 3:
                     row['missing_fields'] = missing_fields  # Add for debugging
                     incomplete_restaurants.append(row)
             
