@@ -189,7 +189,7 @@ def show_scraping_statistics(restaurants: List[dict]):
     print(f"   Vegetarian restaurants: {vegetarian_count}")
     print(f"   Veg-friendly restaurants: {veg_options_count}")
 
-def enhance_restaurants(limit: int = 30):
+def enhance_restaurants(limit: int = None):
     """Enhance existing rows by scraping their cow_reviews pages for missing fields"""
     print("🧩 Enhancing existing restaurant rows from cow_reviews pages...")
     try:
@@ -198,7 +198,9 @@ def enhance_restaurants(limit: int = 30):
             print("❌ No database connection available")
             return False
 
-        rows = db.get_incomplete_restaurants(limit=limit)
+        # Use a very large limit if none specified to get all rows
+        effective_limit = limit if limit is not None else 10000
+        rows = db.get_incomplete_restaurants(limit=effective_limit)
         if not rows:
             print("✅ Nothing to enhance (no rows with missing fields or cow_reviews)")
             return True
@@ -388,7 +390,7 @@ def show_help():
     print("  python main.py clear-db                - Clear restaurants + logs")
     print("  python main.py clear-db --include-sessions  - Also clear scraping_progress sessions")
     print("  python main.py enhance                - Enhance all existing rows via cow_reviews page")
-    print("  python main.py enhance --limit N       - Enhance only N rows")
+    print("  python main.py enhance --limit N       - Enhance only N rows (default: all rows)")
     print("  python main.py help                   - Show this help")
     print("  python main.py                        - Run full scraping (default)")
     print("")
@@ -474,10 +476,7 @@ def main():
                     print("❌ Invalid limit value. Please provide a positive integer.")
                     return
             
-            if limit:
-                enhance_restaurants(limit=limit)
-            else:
-                enhance_restaurants(limit=10000)  # Large number to process all
+            enhance_restaurants(limit=limit)
             return
         elif command == "clear-db":
             # Optional flag: --include-sessions
