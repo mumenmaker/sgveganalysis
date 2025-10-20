@@ -1,14 +1,22 @@
 #!/usr/bin/env python3
 """
 HappyCow Singapore Restaurant Scraper
-Scrapes restaurant data from HappyCow veggiemap and stores it in Supabase database
+Scrapes restaurant data from HappyCow's searchmap by sectors and stores it in Supabase
 """
 
-import logging
-import os
 import sys
-from hcowscraper import VeggiemapScraper
+import os
+import logging
+import time
+from typing import List, Optional
+
+# Add the scraper directory to the Python path
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
 from config import Config
+from database import DatabaseManager
+from models import Restaurant
+from sectorscraper import HappyCowSectorScraper, SingaporeSectorGrid
 
 def setup_logging():
     """Setup logging configuration"""
@@ -29,8 +37,8 @@ def test_database_connection():
     print("🔍 Testing database connection...")
     
     try:
-        scraper = VeggiemapScraper(enable_database=True)
-        if scraper.test_database_connection():
+        db_manager = DatabaseManager()
+        if db_manager.test_connection():
             print("✅ Database connection successful!")
             return True
         else:
@@ -40,67 +48,61 @@ def test_database_connection():
         print(f"❌ Database connection error: {e}")
         return False
 
-def test_coordinates_only():
-    """Test coordinate extraction only (faster for testing)"""
-    print("🗺️ Testing coordinate extraction...")
+def test_sector_scraping():
+    """Test sector scraping with a few sectors"""
+    print("🗺️ Testing sector scraping...")
     
     try:
-        scraper = VeggiemapScraper(enable_database=False)
-        url = f"{Config.VEGGIEMAP_URL}?" + "&".join([f"{k}={v}" for k, v in Config.SINGAPORE_VEGGIEMAP_PARAMS.items()])
+        scraper = HappyCowSectorScraper(headless=True, delay_between_sectors=1)
         
-        coordinates = scraper.scrape_with_coordinates_only(url)
+        # Test with first 3 sectors
+        restaurants = scraper.scrape_all_sectors(start_sector=0, max_sectors=3)
         
-        if coordinates:
-            print(f"✅ Found {len(coordinates)} coordinates")
-            print("Sample coordinates:")
-            for i, coord in enumerate(coordinates[:5], 1):
-                print(f"  {i}. Lat: {coord.get('latitude')}, Lng: {coord.get('longitude')}")
+        if restaurants:
+            print(f"✅ Found {len(restaurants)} restaurants from 3 sectors")
+            print("Sample restaurants:")
+            for i, restaurant in enumerate(restaurants[:3], 1):
+                print(f"  {i}. {restaurant.get('name', 'Unknown')} - ({restaurant.get('latitude')}, {restaurant.get('longitude')})")
             return True
         else:
-            print("❌ No coordinates found")
+            print("❌ No restaurants found")
             return False
             
     except Exception as e:
-        print(f"❌ Coordinate extraction error: {e}")
+        print(f"❌ Sector scraping error: {e}")
         return False
+    finally:
+        scraper.page_loader.close_driver()
 
-def scrape_restaurants(batch_size: int = None, resume_session: str = None):
-    """Scrape restaurants from veggiemap"""
-    print("🍽️ Starting restaurant scraping from HappyCow veggiemap...")
+def scrape_restaurants(start_sector: int = 0, max_sectors: Optional[int] = None, region: Optional[str] = None):
+    """Scrape restaurants from all sectors"""
+    print("🍽️ Starting comprehensive restaurant scraping...")
     
     try:
-        # Validate batch size
-        if batch_size:
-            if batch_size < Config.MIN_BATCH_SIZE or batch_size > Config.MAX_BATCH_SIZE:
-                print(f"❌ Batch size must be between {Config.MIN_BATCH_SIZE} and {Config.MAX_BATCH_SIZE}")
-                return False
-            print(f"📦 Using batch size: {batch_size}")
+        scraper = HappyCowSectorScraper(headless=True, delay_between_sectors=2)
+        
+        if region:
+            print(f"Scraping restaurants in region: {region}")
+            restaurants = scraper.scrape_sectors_by_region(region)
         else:
-            batch_size = Config.DEFAULT_BATCH_SIZE
-            print(f"📦 Using default batch size: {batch_size}")
-        
-        scraper = VeggiemapScraper(enable_database=True, batch_size=batch_size)
-        
-        # Build URL
-        url = f"{Config.VEGGIEMAP_URL}?" + "&".join([f"{k}={v}" for k, v in Config.SINGAPORE_VEGGIEMAP_PARAMS.items()])
-        print(f"Scraping from: {url}")
-        
-        # Scrape restaurants with cluster expansion
-        restaurants = scraper.scrape_singapore_restaurants(url, use_cluster_expansion=True, resume_session=resume_session)
+            print(f"Scraping restaurants from sectors {start_sector + 1} onwards")
+            if max_sectors:
+                print(f"Maximum sectors to process: {max_sectors}")
+            restaurants = scraper.scrape_all_sectors(start_sector=start_sector, max_sectors=max_sectors)
         
         if restaurants:
             print(f"✅ Successfully scraped {len(restaurants)} restaurants")
             
-            # Show statistics
-            stats = scraper.get_restaurant_statistics()
-            if "error" not in stats:
-                print(f"📊 Database statistics:")
-                print(f"   Total restaurants: {stats['total_restaurants']}")
-                print(f"   With coordinates: {stats['with_coordinates']}")
-                print(f"   Vegan restaurants: {stats['vegan_restaurants']}")
-                print(f"   Coordinate coverage: {stats['coordinate_coverage']:.1f}%")
-            
-            return True
+            # Save to database
+            if save_restaurants_to_database(restaurants):
+                print("✅ Restaurants saved to database")
+                
+                # Show statistics
+                show_scraping_statistics(restaurants)
+                return True
+            else:
+                print("❌ Failed to save restaurants to database")
+                return False
         else:
             print("❌ No restaurants found")
             return False
@@ -108,51 +110,100 @@ def scrape_restaurants(batch_size: int = None, resume_session: str = None):
     except Exception as e:
         print(f"❌ Scraping error: {e}")
         return False
+    finally:
+        scraper.page_loader.close_driver()
 
-def list_sessions():
-    """List available scraping sessions"""
-    print("📋 Listing available scraping sessions...")
-    
+def save_restaurants_to_database(restaurants: List[dict]) -> bool:
+    """Save restaurants to Supabase database"""
     try:
-        scraper = VeggiemapScraper(enable_database=True)
+        db_manager = DatabaseManager()
         
-        if scraper.db_manager and scraper.db_manager.supabase:
-            from hcowscraper.batch_progress_tracker import BatchProgressTracker
-            tracker = BatchProgressTracker(scraper.db_manager)
-            sessions = tracker.get_available_sessions()
-            
-            if sessions:
-                print(f"Found {len(sessions)} sessions:")
-                for session in sessions:
-                    status = "✅ Completed" if session['is_completed'] else "🔄 In Progress"
-                    print(f"  {session['session_id'][:8]}... - {status} - {session['processed_restaurants']}/{session['total_restaurants']} restaurants")
-                return True
-            else:
-                print("No sessions found")
-                return True
-        else:
+        if not db_manager.supabase:
             print("❌ No database connection available")
             return False
+        
+        # Convert to Restaurant models
+        restaurant_models = []
+        for restaurant_data in restaurants:
+            try:
+                restaurant = Restaurant(
+                    name=restaurant_data.get('name', 'Unknown Restaurant'),
+                    address=restaurant_data.get('address', 'Address not available'),
+                    latitude=restaurant_data.get('latitude'),
+                    longitude=restaurant_data.get('longitude'),
+                    phone=restaurant_data.get('phone', ''),
+                    website=restaurant_data.get('website', ''),
+                    rating=restaurant_data.get('rating', 0.0),
+                    price_range=restaurant_data.get('price_range', ''),
+                    cuisine_type=restaurant_data.get('cuisine_type', ''),
+                    hours=restaurant_data.get('hours', ''),
+                    description=restaurant_data.get('description', ''),
+                    is_vegan=restaurant_data.get('is_vegan', False),
+                    is_vegetarian=restaurant_data.get('is_vegetarian', False),
+                    has_veg_options=restaurant_data.get('has_veg_options', False)
+                )
+                restaurant_models.append(restaurant)
+            except Exception as e:
+                print(f"Warning: Skipping invalid restaurant data: {e}")
+                continue
+        
+        if not restaurant_models:
+            print("❌ No valid restaurant models to save")
+            return False
+        
+        # Insert restaurants in batches
+        batch_size = 20
+        total_inserted = 0
+        total_skipped = 0
+        
+        for i in range(0, len(restaurant_models), batch_size):
+            batch = restaurant_models[i:i + batch_size]
+            success, inserted, skipped = db_manager.insert_restaurants(batch)
             
+            if success:
+                total_inserted += inserted
+                total_skipped += skipped
+                print(f"Batch {i//batch_size + 1}: {inserted} inserted, {skipped} skipped")
+            else:
+                print(f"❌ Failed to insert batch {i//batch_size + 1}")
+                return False
+        
+        print(f"✅ Database insertion completed: {total_inserted} inserted, {total_skipped} skipped")
+        return True
+        
     except Exception as e:
-        print(f"❌ Error listing sessions: {e}")
+        print(f"❌ Database error: {e}")
         return False
+
+def show_scraping_statistics(restaurants: List[dict]):
+    """Show statistics about scraped restaurants"""
+    if not restaurants:
+        return
+    
+    total = len(restaurants)
+    with_coords = sum(1 for r in restaurants if r.get('latitude') and r.get('longitude'))
+    vegan_count = sum(1 for r in restaurants if r.get('is_vegan'))
+    vegetarian_count = sum(1 for r in restaurants if r.get('is_vegetarian'))
+    veg_options_count = sum(1 for r in restaurants if r.get('has_veg_options'))
+    
+    print(f"\n📊 Scraping Statistics:")
+    print(f"   Total restaurants: {total}")
+    print(f"   With coordinates: {with_coords} ({with_coords/total*100:.1f}%)")
+    print(f"   Vegan restaurants: {vegan_count}")
+    print(f"   Vegetarian restaurants: {vegetarian_count}")
+    print(f"   Veg-friendly restaurants: {veg_options_count}")
 
 def clear_database():
     """Clear database records and logs"""
     print("🗑️ Clearing database records and logs...")
     
     try:
-        scraper = VeggiemapScraper(enable_database=True)
+        db_manager = DatabaseManager()
         
-        if scraper.db_manager and scraper.db_manager.supabase:
+        if db_manager.supabase:
             # Delete all restaurants
-            result = scraper.db_manager.supabase.table('restaurants').delete().neq('id', 0).execute()
+            result = db_manager.supabase.table('restaurants').delete().neq('id', 0).execute()
             print("✅ Successfully deleted all restaurant records from database")
-            
-            # Clear progress tracking
-            result = scraper.db_manager.supabase.table('scraping_progress').delete().neq('id', 0).execute()
-            print("✅ Cleared all progress tracking records")
             
             # Remove log files
             log_dir = 'logs'
@@ -165,7 +216,6 @@ def clear_database():
             
             print("✅ Database cleared successfully!")
             print("   - All restaurant records deleted")
-            print("   - All progress tracking cleared")
             print("   - Log files removed")
             print("   - Ready for fresh scraping")
             return True
@@ -183,27 +233,24 @@ def show_help():
     print("=====================================")
     print("Commands:")
     print("  python main.py test                    - Test database connection")
-    print("  python main.py test-coords            - Test coordinate extraction only")
-    print("  python main.py scrape                 - Scrape restaurants from veggiemap")
-    print("  python main.py scrape --batch-size N  - Scrape with custom batch size")
-    print("  python main.py scrape --resume SESSION - Resume interrupted scraping session")
-    print("  python main.py list-sessions          - List available scraping sessions")
-    print("  python main.py clear-db               - Clear database records and logs")
+    print("  python main.py test-sectors            - Test sector scraping (3 sectors)")
+    print("  python main.py scrape                  - Scrape all 48 sectors")
+    print("  python main.py scrape --start N        - Start from sector N")
+    print("  python main.py scrape --max N           - Process maximum N sectors")
+    print("  python main.py scrape --region REGION  - Scrape specific region")
+    print("  python main.py clear-db                - Clear database records and logs")
     print("  python main.py help                   - Show this help")
     print("  python main.py                        - Run full scraping (default)")
     print("")
-    print("Batch Processing:")
-    print(f"  - Default batch size: {Config.DEFAULT_BATCH_SIZE}")
-    print(f"  - Batch size range: {Config.MIN_BATCH_SIZE}-{Config.MAX_BATCH_SIZE}")
-    print("  - Progress is saved after each batch")
-    print("  - Interrupted scrapes can be resumed")
+    print("Regions:")
+    print("  central, east, west, north, northeast, south")
     print("")
     print("The scraper will:")
-    print("  - Load the HappyCow veggiemap for Singapore")
-    print("  - Zoom in systematically to expand marker clusters")
-    print("  - Extract individual restaurant coordinates and data")
-    print("  - Process restaurants in batches for better reliability")
-    print("  - Save results to your Supabase database with progress tracking")
+    print("  - Divide Singapore into 48 sectors (6x8 grid)")
+    print("  - Scrape each sector for up to 81 restaurants")
+    print("  - Extract restaurant data including coordinates")
+    print("  - Save results to your Supabase database")
+    print("  - Handle duplicates using coordinate-based unique constraints")
 
 def main():
     """Main function to run the scraper"""
@@ -217,36 +264,41 @@ def main():
         if command == "test":
             test_database_connection()
             return
-        elif command == "test-coords":
-            test_coordinates_only()
+        elif command == "test-sectors":
+            test_sector_scraping()
             return
         elif command == "scrape":
             # Parse scrape arguments
-            batch_size = None
-            resume_session = None
+            start_sector = 0
+            max_sectors = None
+            region = None
             
             i = 2
             while i < len(sys.argv):
                 arg = sys.argv[i]
-                if arg == "--batch-size" and i + 1 < len(sys.argv):
+                if arg == "--start" and i + 1 < len(sys.argv):
                     try:
-                        batch_size = int(sys.argv[i + 1])
+                        start_sector = int(sys.argv[i + 1])
                         i += 2
                     except ValueError:
-                        print("❌ Invalid batch size. Must be a number.")
+                        print("❌ Invalid start sector. Must be a number.")
                         return
-                elif arg == "--resume" and i + 1 < len(sys.argv):
-                    resume_session = sys.argv[i + 1]
+                elif arg == "--max" and i + 1 < len(sys.argv):
+                    try:
+                        max_sectors = int(sys.argv[i + 1])
+                        i += 2
+                    except ValueError:
+                        print("❌ Invalid max sectors. Must be a number.")
+                        return
+                elif arg == "--region" and i + 1 < len(sys.argv):
+                    region = sys.argv[i + 1]
                     i += 2
                 else:
                     print(f"❌ Unknown argument: {arg}")
                     print("Use 'python main.py help' for available options")
                     return
             
-            scrape_restaurants(batch_size=batch_size, resume_session=resume_session)
-            return
-        elif command == "list-sessions":
-            list_sessions()
+            scrape_restaurants(start_sector=start_sector, max_sectors=max_sectors, region=region)
             return
         elif command == "clear-db":
             clear_database()

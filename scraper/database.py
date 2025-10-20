@@ -22,6 +22,21 @@ class DatabaseManager:
         except Exception as e:
             self.logger.error(f"Failed to connect to Supabase: {e}")
     
+    def test_connection(self) -> bool:
+        """Test the database connection"""
+        try:
+            if not self.supabase:
+                self.logger.error("No Supabase connection available")
+                return False
+            
+            # Try a simple query to test the connection
+            result = self.supabase.table('restaurants').select('id').limit(1).execute()
+            self.logger.info("Database connection test successful")
+            return True
+        except Exception as e:
+            self.logger.error(f"Database connection test failed: {e}")
+            return False
+    
     def create_tables(self):
         """Create necessary tables in Supabase"""
         if not self.supabase:
