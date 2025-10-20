@@ -17,7 +17,7 @@ CREATE TABLE restaurants (
     website TEXT,
     cow_reviews TEXT,
     description TEXT,
-    cuisine_type TEXT,
+    category TEXT,
     price_range TEXT,
     rating DECIMAL(4,2),
     review_count INTEGER,

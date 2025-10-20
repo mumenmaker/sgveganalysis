@@ -54,7 +54,7 @@ class DatabaseManager:
                 website TEXT,
                 cow_reviews TEXT,
                 description TEXT,
-                cuisine_type VARCHAR(100),
+                category VARCHAR(100),
                 price_range VARCHAR(50),
                 rating DECIMAL(3,2),
                 review_count INTEGER,
@@ -198,6 +198,51 @@ class DatabaseManager:
         except Exception as e:
             self.logger.error(f"Error getting restaurants: {e}")
             return []
+
+    def get_incomplete_restaurants(self, limit: int = 50) -> List[dict]:
+        """Fetch restaurants missing key fields and having a cow_reviews link"""
+        if not self.supabase:
+            self.logger.error("No Supabase connection available")
+            return []
+        try:
+            # phone or description missing and cow_reviews present
+            query = (
+                self.supabase
+                .table('restaurants')
+                .select('*')
+                .is_('phone', 'null')
+                .or_("description.is.null,description.eq.")
+                .not_.is_('cow_reviews', 'null')
+                .limit(limit)
+            )
+            result = query.execute()
+            return result.data or []
+        except Exception as e:
+            # Fallback: manual filter without .or_ chaining support in client
+            try:
+                result = self.supabase.table('restaurants').select('*').limit(limit * 5).execute()
+                rows = result.data or []
+                filtered = [r for r in rows if (not r.get('phone') or not r.get('description')) and r.get('cow_reviews')]
+                return filtered[:limit]
+            except Exception as ex:
+                self.logger.error(f"Error getting incomplete restaurants: {e} / {ex}")
+                return []
+
+    def update_restaurant_fields(self, restaurant_id: int, fields: dict) -> bool:
+        """Update specific fields for a restaurant by id"""
+        if not self.supabase:
+            self.logger.error("No Supabase connection available")
+            return False
+        try:
+            # Remove None values to avoid overwriting with nulls
+            clean = {k: v for k, v in fields.items() if v is not None}
+            if not clean:
+                return True
+            self.supabase.table('restaurants').update(clean).eq('id', restaurant_id).execute()
+            return True
+        except Exception as e:
+            self.logger.error(f"Error updating restaurant {restaurant_id}: {e}")
+            return False
     
     def search_restaurants(self, query: str, limit: int = 100) -> List[dict]:
         """Search restaurants by name or description"""

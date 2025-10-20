@@ -231,7 +231,7 @@ class HappyCowDataExtractor:
                 'website': website,
                 'rating': rating,
                 'price_range': price_range,
-                'cuisine_type': cuisine_type,
+                'category': cuisine_type,
                 'hours': hours,
                 'description': description,
                 'cow_reviews': cow_reviews,

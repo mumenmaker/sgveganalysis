@@ -10,7 +10,7 @@ class Restaurant(BaseModel):
     website: Optional[str] = None
     cow_reviews: Optional[str] = None
     description: Optional[str] = None
-    cuisine_type: Optional[str] = None
+    category: Optional[str] = None
     price_range: Optional[str] = None
     rating: Optional[float] = None
     review_count: Optional[int] = None

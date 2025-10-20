@@ -223,7 +223,7 @@ class HappyCowSectorScraper:
                         cow_reviews=restaurant_data.get('cow_reviews', ''),
                         rating=restaurant_data.get('rating', 0.0),
                         price_range=restaurant_data.get('price_range', ''),
-                        cuisine_type=restaurant_data.get('cuisine_type', ''),
+                        category=restaurant_data.get('category', ''),
                         hours=restaurant_data.get('hours', ''),
                         description=restaurant_data.get('description', ''),
                         is_vegan=restaurant_data.get('is_vegan', False),

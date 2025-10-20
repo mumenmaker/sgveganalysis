@@ -9,6 +9,7 @@ from .page_loader import HappyCowPageLoader
 from .data_extractor import HappyCowDataExtractor
 from .sector_scraper import HappyCowSectorScraper
 from .session_manager import ScrapingSessionManager
+from .reviews_enhancer import ReviewsEnhancer
 
 __version__ = "1.0.0"
 __author__ = "HappyCow Scraper Team"
@@ -19,5 +20,6 @@ __all__ = [
     'HappyCowPageLoader',
     'HappyCowDataExtractor',
     'HappyCowSectorScraper',
-    'ScrapingSessionManager'
+    'ScrapingSessionManager',
+    'ReviewsEnhancer'
 ]

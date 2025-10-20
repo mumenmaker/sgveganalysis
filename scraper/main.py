@@ -17,6 +17,7 @@ from config import Config
 from database import DatabaseManager
 from models import Restaurant
 from sectorscraper import HappyCowSectorScraper, SingaporeSectorGrid, ScrapingSessionManager
+from sectorscraper import ReviewsEnhancer
 
 def setup_logging():
     """Setup logging configuration"""
@@ -188,6 +189,64 @@ def show_scraping_statistics(restaurants: List[dict]):
     print(f"   Vegetarian restaurants: {vegetarian_count}")
     print(f"   Veg-friendly restaurants: {veg_options_count}")
 
+def enhance_restaurants(limit: int = 30):
+    """Enhance existing rows by scraping their cow_reviews pages for missing fields"""
+    print("🧩 Enhancing existing restaurant rows from cow_reviews pages...")
+    try:
+        db = DatabaseManager()
+        if not db.supabase:
+            print("❌ No database connection available")
+            return False
+
+        rows = db.get_incomplete_restaurants(limit=limit)
+        if not rows:
+            print("✅ Nothing to enhance (no rows with missing fields or cow_reviews)")
+            return True
+
+        print(f"Found {len(rows)} rows to enhance")
+        enhancer = ReviewsEnhancer(headless=True)
+        updated_count = 0
+
+        try:
+            for r in rows:
+                rid = r.get('id')
+                url = r.get('cow_reviews')
+                if not rid or not url:
+                    continue
+                details = enhancer.fetch_details(url)
+                if not details:
+                    continue
+
+                fields = {
+                    'phone': details.get('phone') or r.get('phone'),
+                    'address': details.get('address') or r.get('address'),
+                    'description': details.get('description') or r.get('description'),
+                    'category': details.get('category') or r.get('category'),
+                    'price_range': details.get('price_range') or r.get('price_range'),
+                    'hours': details.get('hours') or r.get('hours'),
+                }
+
+                # Optional numeric fields
+                if details.get('rating') is not None:
+                    fields['rating'] = details['rating']
+                if details.get('review_count') is not None:
+                    fields['review_count'] = details['review_count']
+                # Array features if available
+                if details.get('features'):
+                    fields['features'] = details['features']
+
+                if db.update_restaurant_fields(rid, fields):
+                    updated_count += 1
+
+        finally:
+            enhancer.close()
+
+        print(f"✅ Enhanced {updated_count} row(s)")
+        return True
+
+    except Exception as e:
+        print(f"❌ Enhance error: {e}")
+        return False
 def list_sessions():
     """List available scraping sessions"""
     print("📋 Available Scraping Sessions:")
@@ -325,6 +384,8 @@ def show_help():
     print("  python main.py resume SESSION_ID      - Resume a specific session")
     print("  python main.py clear-db                - Clear restaurants + logs")
     print("  python main.py clear-db --include-sessions  - Also clear scraping_progress sessions")
+    print("  python main.py enhance                - Enhance all existing rows via cow_reviews page")
+    print("  python main.py enhance --limit N       - Enhance only N rows")
     print("  python main.py help                   - Show this help")
     print("  python main.py                        - Run full scraping (default)")
     print("")
@@ -396,6 +457,24 @@ def main():
                     return
             
             scrape_restaurants(start_sector=start_sector, max_sectors=max_sectors, region=region)
+            return
+        elif command == "enhance":
+            # Parse limit argument
+            limit = None
+            if len(sys.argv) > 2:
+                try:
+                    if sys.argv[2] == "--limit" and len(sys.argv) > 3:
+                        limit = int(sys.argv[3])
+                    elif sys.argv[2].startswith("--limit="):
+                        limit = int(sys.argv[2].split("=")[1])
+                except ValueError:
+                    print("❌ Invalid limit value. Please provide a positive integer.")
+                    return
+            
+            if limit:
+                enhance_restaurants(limit=limit)
+            else:
+                enhance_restaurants(limit=10000)  # Large number to process all
             return
         elif command == "clear-db":
             # Optional flag: --include-sessions

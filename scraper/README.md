@@ -47,6 +47,9 @@ python main.py test
 # Clear database records and logs
 python main.py clear-db
 
+# Enhance existing rows from cow_reviews pages
+python main.py enhance
+
 # Show help
 python main.py help
 ```
