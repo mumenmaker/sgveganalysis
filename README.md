@@ -29,6 +29,9 @@ python main.py test
 # Scrape all sectors (headless)
 python main.py scrape
 
+# Enhance existing rows using cow_reviews pages
+python main.py enhance
+
 # List available sessions
 python main.py list-sessions
 
