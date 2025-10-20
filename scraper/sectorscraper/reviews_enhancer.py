@@ -166,9 +166,10 @@ class ReviewsEnhancer:
                     if nums:
                         d['review_count'] = int(nums[0])
 
-            # Hours
+            # Hours - prioritize hours-summary class
             hours = self._first_text([
-                ".hours, .opening-hours, .schedule, .time"
+                ".hours-summary",  # Primary selector for hours
+                ".hours, .opening-hours, .schedule, .time"  # Fallback selectors
             ])
             if hours:
                 d['hours'] = hours
