@@ -234,6 +234,9 @@ def enhance_restaurants(limit: int = 30):
                 # Array features if available
                 if details.get('features'):
                     fields['features'] = details['features']
+                # Array images if available
+                if details.get('images_links'):
+                    fields['images_links'] = details['images_links']
 
                 if db.update_restaurant_fields(rid, fields):
                     updated_count += 1

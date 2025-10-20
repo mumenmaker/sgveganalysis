@@ -28,6 +28,7 @@ CREATE TABLE restaurants (
     longitude DECIMAL(11, 8),
     features TEXT[],
     hours TEXT,
+    images_links TEXT[],  -- Array of restaurant image URLs
     happycow_url TEXT,
     scraped_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),

@@ -21,6 +21,7 @@ class Restaurant(BaseModel):
     has_veg_options: bool = False
     features: List[str] = Field(default_factory=list)  # e.g., "outdoor seating", "delivery"
     hours: Optional[str] = None
+    images_links: List[str] = Field(default_factory=list)  # Array of restaurant image URLs
     happycow_url: Optional[str] = None
     scraped_at: datetime = Field(default_factory=datetime.now)
     

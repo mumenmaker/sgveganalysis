@@ -61,6 +61,7 @@ class ReviewsEnhancer:
             'review_count': None,
             'hours': None,
             'category': None,
+            'images_links': None,
         }
 
         try:
@@ -179,6 +180,11 @@ class ReviewsEnhancer:
             if hours:
                 d['hours'] = hours
 
+            # Images - extract restaurant image URLs
+            images = self._extract_restaurant_images()
+            if images:
+                d['images_links'] = images
+
             # Features: prefer venue-info flex divs, fallback to previous badges
             features_vals = []
             try:
@@ -212,6 +218,118 @@ class ReviewsEnhancer:
             self.logger.debug(f"Parse page encountered issues: {e}")
 
         return d
+
+    def _extract_restaurant_images(self):
+        """Extract restaurant image URLs from the review page"""
+        try:
+            image_urls = []
+            
+            # Primary method: Look for images in the specific listing-images div
+            try:
+                listing_images_div = self.driver.find_element(By.ID, "listing-images")
+                if listing_images_div:
+                    # Look for images within venue-list-images divs
+                    venue_image_divs = listing_images_div.find_elements(By.CSS_SELECTOR, ".venue-list-images")
+                    
+                    for venue_div in venue_image_divs:
+                        # Look for img tags within each venue-list-images div
+                        images = venue_div.find_elements(By.CSS_SELECTOR, "img")
+                        for img in images:
+                            src = img.get_attribute('src')
+                            if src and self._is_valid_image_url(src):
+                                # Convert relative URLs to absolute URLs
+                                absolute_src = self._make_absolute_url(src)
+                                if absolute_src and absolute_src not in image_urls:
+                                    image_urls.append(absolute_src)
+                    
+                    # Also look for any other images within the listing-images div
+                    all_images = listing_images_div.find_elements(By.CSS_SELECTOR, "img")
+                    for img in all_images:
+                        src = img.get_attribute('src')
+                        if src and self._is_valid_image_url(src):
+                            absolute_src = self._make_absolute_url(src)
+                            if absolute_src and absolute_src not in image_urls:
+                                image_urls.append(absolute_src)
+                                
+            except Exception as e:
+                self.logger.debug(f"Could not find listing-images div: {e}")
+            
+            # Fallback method: Use broader selectors if listing-images div not found
+            if not image_urls:
+                fallback_selectors = [
+                    "img[src*='restaurant']",  # Images with 'restaurant' in src
+                    "img[src*='venue']",       # Images with 'venue' in src
+                    "img[src*='food']",        # Images with 'food' in src
+                    "img[src*='happycow']",    # Images from HappyCow CDN
+                    ".venue-photo img",        # Venue photo images
+                    ".restaurant-photo img",   # Restaurant photo images
+                    ".gallery img",            # Gallery images
+                    ".photos img",             # Photos section
+                    ".images img",             # Images section
+                    "img[alt*='restaurant']",  # Images with restaurant in alt text
+                    "img[alt*='food']",        # Images with food in alt text
+                    "img[alt*='venue']"        # Images with venue in alt text
+                ]
+                
+                for selector in fallback_selectors:
+                    try:
+                        images = self.driver.find_elements(By.CSS_SELECTOR, selector)
+                        for img in images:
+                            src = img.get_attribute('src')
+                            if src and self._is_valid_image_url(src):
+                                absolute_src = self._make_absolute_url(src)
+                                if absolute_src and absolute_src not in image_urls:
+                                    image_urls.append(absolute_src)
+                                    
+                    except Exception:
+                        continue
+            
+            # Limit to reasonable number of images (max 10)
+            return image_urls[:10] if image_urls else []
+            
+        except Exception as e:
+            self.logger.debug(f"Error extracting restaurant images: {e}")
+            return []
+
+    def _make_absolute_url(self, url):
+        """Convert relative URL to absolute URL"""
+        if not url:
+            return None
+        
+        if url.startswith('http'):
+            return url
+        elif url.startswith('//'):
+            return 'https:' + url
+        elif url.startswith('/'):
+            return 'https://www.happycow.net' + url
+        else:
+            return 'https://www.happycow.net/' + url
+
+    def _is_valid_image_url(self, url):
+        """Check if URL is a valid image URL"""
+        if not url:
+            return False
+        
+        # Check for common image extensions
+        image_extensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg']
+        url_lower = url.lower()
+        
+        # Must have an image extension
+        if not any(ext in url_lower for ext in image_extensions):
+            return False
+        
+        # Exclude common non-restaurant images
+        exclude_patterns = [
+            'logo', 'icon', 'avatar', 'profile', 'banner', 'advertisement',
+            'sponsor', 'partner', 'social', 'facebook', 'twitter', 'instagram',
+            'youtube', 'linkedin', 'pinterest', 'tiktok', 'snapchat'
+        ]
+        
+        for pattern in exclude_patterns:
+            if pattern in url_lower:
+                return False
+        
+        return True
 
     def _extract_price_range_from_icons(self):
         """Extract price range by checking for colored SVG icons in title divs"""

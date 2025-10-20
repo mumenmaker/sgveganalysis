@@ -65,6 +65,7 @@ class DatabaseManager:
                 has_veg_options BOOLEAN DEFAULT FALSE,
                 features TEXT[], -- Array of features
                 hours TEXT,
+                images_links TEXT[], -- Array of restaurant image URLs
                 happycow_url TEXT,
                 scraped_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),

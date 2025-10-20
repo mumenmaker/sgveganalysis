@@ -225,6 +225,7 @@ class HappyCowSectorScraper:
                         price_range=restaurant_data.get('price_range', ''),
                         category=restaurant_data.get('category', ''),
                         hours=restaurant_data.get('hours', ''),
+                        images_links=restaurant_data.get('images_links', []),
                         description=restaurant_data.get('description', ''),
                         is_vegan=restaurant_data.get('is_vegan', False),
                         is_vegetarian=restaurant_data.get('is_vegetarian', False),
