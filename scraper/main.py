@@ -208,16 +208,20 @@ def enhance_restaurants(limit: int = None):
         print(f"Found {len(rows)} rows to enhance")
         enhancer = ReviewsEnhancer(headless=True)
         updated_count = 0
+        
+        # Track timing for progress estimation
+        import time
+        start_time = time.time()
 
         try:
-            for r in rows:
+            for i, r in enumerate(rows, 1):
                 rid = r.get('id')
                 url = r.get('cow_reviews')
                 missing_fields = r.get('missing_fields', [])
                 if not rid or not url:
                     continue
                 
-                print(f"🔄 Enhancing {r.get('name', 'Unknown')} (missing: {', '.join(missing_fields)})")
+                print(f"🔄 [{i}/{len(rows)}] Enhancing {r.get('name', 'Unknown')} (missing: {', '.join(missing_fields)})")
                 
                 details = enhancer.fetch_details(url)
                 if not details:
@@ -247,14 +251,37 @@ def enhance_restaurants(limit: int = None):
 
                 if db.update_restaurant_fields(rid, fields):
                     updated_count += 1
-                    print(f"  ✅ Enhanced successfully")
+                    progress = (i / len(rows)) * 100
+                    
+                    # Calculate time estimation
+                    elapsed_time = time.time() - start_time
+                    if i > 0:
+                        avg_time_per_row = elapsed_time / i
+                        remaining_rows = len(rows) - i
+                        estimated_remaining_time = remaining_rows * avg_time_per_row
+                        
+                        if estimated_remaining_time > 60:
+                            eta_str = f"{estimated_remaining_time/60:.1f}min"
+                        else:
+                            eta_str = f"{estimated_remaining_time:.0f}s"
+                        
+                        print(f"  ✅ Enhanced successfully ({progress:.1f}% complete, ~{eta_str} remaining)")
+                    else:
+                        print(f"  ✅ Enhanced successfully ({progress:.1f}% complete)")
                 else:
                     print(f"  ❌ Failed to update database")
 
         finally:
             enhancer.close()
 
-        print(f"✅ Enhanced {updated_count} row(s)")
+        # Final timing summary
+        total_time = time.time() - start_time
+        if total_time > 60:
+            time_str = f"{total_time/60:.1f} minutes"
+        else:
+            time_str = f"{total_time:.1f} seconds"
+        
+        print(f"✅ Enhanced {updated_count} row(s) out of {len(rows)} processed in {time_str}")
         return True
 
     except Exception as e:
