@@ -266,8 +266,8 @@ def resume_session(session_id: str):
     finally:
         scraper.page_loader.close_driver()
 
-def clear_database():
-    """Clear database records and logs"""
+def clear_database(include_sessions: bool = False):
+    """Clear database records and logs. Optionally clear session records."""
     print("🗑️ Clearing database records and logs...")
     
     try:
@@ -277,6 +277,14 @@ def clear_database():
             # Delete all restaurants
             result = db_manager.supabase.table('restaurants').delete().neq('id', 0).execute()
             print("✅ Successfully deleted all restaurant records from database")
+
+            # Optionally delete session progress
+            if include_sessions:
+                try:
+                    db_manager.supabase.table('scraping_progress').delete().neq('id', 0).execute()
+                    print("✅ Successfully deleted all scraping_progress session records")
+                except Exception as e:
+                    print(f"❌ Error deleting scraping_progress records: {e}")
             
             # Remove log files
             log_dir = 'logs'
@@ -289,6 +297,8 @@ def clear_database():
             
             print("✅ Database cleared successfully!")
             print("   - All restaurant records deleted")
+            if include_sessions:
+                print("   - All scraping_progress session records deleted")
             print("   - Log files removed")
             print("   - Ready for fresh scraping")
             return True
@@ -313,7 +323,8 @@ def show_help():
     print("  python main.py scrape --region REGION  - Scrape specific region")
     print("  python main.py list-sessions          - List available scraping sessions")
     print("  python main.py resume SESSION_ID      - Resume a specific session")
-    print("  python main.py clear-db                - Clear database records and logs")
+    print("  python main.py clear-db                - Clear restaurants + logs")
+    print("  python main.py clear-db --include-sessions  - Also clear scraping_progress sessions")
     print("  python main.py help                   - Show this help")
     print("  python main.py                        - Run full scraping (default)")
     print("")
@@ -387,7 +398,11 @@ def main():
             scrape_restaurants(start_sector=start_sector, max_sectors=max_sectors, region=region)
             return
         elif command == "clear-db":
-            clear_database()
+            # Optional flag: --include-sessions
+            include_sessions = False
+            if len(sys.argv) > 2 and sys.argv[2] == "--include-sessions":
+                include_sessions = True
+            clear_database(include_sessions=include_sessions)
             return
         elif command == "help":
             show_help()
