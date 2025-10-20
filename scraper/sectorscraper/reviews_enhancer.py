@@ -112,12 +112,17 @@ class ReviewsEnhancer:
                 if cuisine:
                     d['category'] = cuisine
 
-            # Price range
-            price = self._first_text([
-                ".price, .price-range, .cost, .budget"
-            ])
-            if price:
-                d['price_range'] = price
+            # Price range - check for colored SVG icons in title divs
+            price_range = self._extract_price_range_from_icons()
+            if price_range:
+                d['price_range'] = price_range
+            else:
+                # Fallback to text-based extraction
+                price = self._first_text([
+                    ".price, .price-range, .cost, .budget"
+                ])
+                if price:
+                    d['price_range'] = price
 
             # Rating and reviews
             # Rating: prefer itemprop content attribute
@@ -207,6 +212,151 @@ class ReviewsEnhancer:
             self.logger.debug(f"Parse page encountered issues: {e}")
 
         return d
+
+    def _extract_price_range_from_icons(self):
+        """Extract price range by checking for colored SVG icons in title divs"""
+        try:
+            # Look for divs with title attributes for price ranges
+            price_titles = ["Inexpensive", "Moderate", "Expensive"]
+            
+            for title in price_titles:
+                try:
+                    # Find div with specific title attribute
+                    divs = self.driver.find_elements(By.CSS_SELECTOR, f"div[title='{title}']")
+                    
+                    for div in divs:
+                        # Look for SVG icon within this div
+                        svg_icons = div.find_elements(By.CSS_SELECTOR, "svg")
+                        
+                        for svg in svg_icons:
+                            # Check if SVG is colored yellow (indicating selected)
+                            if self._is_svg_colored_yellow(svg):
+                                self.logger.debug(f"Found price range: {title}")
+                                return title
+                                
+                except Exception:
+                    continue
+            
+            # Alternative approach: look for any div with price-related classes or attributes
+            try:
+                # Look for common price range indicators
+                price_selectors = [
+                    "div[class*='price']",
+                    "div[class*='cost']", 
+                    "div[class*='budget']",
+                    ".price-range",
+                    ".cost-range"
+                ]
+                
+                for selector in price_selectors:
+                    elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
+                    for element in elements:
+                        # Check if this element contains price range text
+                        text = element.text.strip().lower()
+                        if 'inexpensive' in text:
+                            return 'Inexpensive'
+                        elif 'moderate' in text:
+                            return 'Moderate'
+                        elif 'expensive' in text:
+                            return 'Expensive'
+                            
+            except Exception:
+                pass
+                    
+            return None
+            
+        except Exception as e:
+            self.logger.debug(f"Error extracting price range from icons: {e}")
+            return None
+
+    def _is_svg_colored_yellow(self, svg_element):
+        """Check if SVG element is colored yellow (indicating it's selected)"""
+        try:
+            # Check for yellow CSS classes (Tailwind CSS style)
+            class_name = svg_element.get_attribute('class') or ''
+            class_lower = class_name.lower()
+            
+            # Check for yellow color classes
+            yellow_classes = [
+                'text-yellow-500', 'text-yellow-400', 'text-yellow-600',
+                'text-yellow-300', 'text-yellow-700', 'text-yellow-800',
+                'text-yellow-900', 'text-yellow-100', 'text-yellow-200',
+                'text-yellow', 'text-amber-500', 'text-amber-400',
+                'text-amber-600', 'text-amber-300', 'text-amber-700',
+                'text-amber-800', 'text-amber-900', 'text-amber-100',
+                'text-amber-200', 'text-amber', 'text-orange-500',
+                'text-orange-400', 'text-orange-600', 'text-orange-300',
+                'text-orange-700', 'text-orange-800', 'text-orange-900',
+                'text-orange-100', 'text-orange-200', 'text-orange'
+            ]
+            
+            if any(yellow_class in class_lower for yellow_class in yellow_classes):
+                return True
+            
+            # Check for non-gray classes (indicating it's selected vs gray/unselected)
+            gray_classes = ['text-gray-500', 'text-gray-400', 'text-gray-600', 'text-gray-300', 'text-gray-700']
+            if not any(gray_class in class_lower for gray_class in gray_classes):
+                # If it's not gray, it might be selected
+                if 'text-' in class_lower:
+                    return True
+            
+            # Fallback: Check for yellow color variations in attributes
+            yellow_colors = [
+                'yellow', '#ffd700', '#ffff00', '#ffeb3b', '#ffc107', 
+                '#ffd54f', '#fff176', '#ffeb3b', 'gold', '#gold'
+            ]
+            
+            # 1. Check fill attribute
+            fill = svg_element.get_attribute('fill')
+            if fill:
+                fill_lower = fill.lower()
+                if any(color in fill_lower for color in yellow_colors):
+                    return True
+            
+            # 2. Check style attribute
+            style = svg_element.get_attribute('style')
+            if style:
+                style_lower = style.lower()
+                if any(color in style_lower for color in yellow_colors):
+                    return True
+            
+            # 3. Check computed style (more reliable)
+            try:
+                computed_style = self.driver.execute_script(
+                    "return window.getComputedStyle(arguments[0]).fill;", 
+                    svg_element
+                )
+                if computed_style:
+                    computed_lower = computed_style.lower()
+                    if any(color in computed_lower for color in yellow_colors):
+                        return True
+            except Exception:
+                pass
+            
+            # 4. Check for yellow color in any child elements
+            child_elements = svg_element.find_elements(By.CSS_SELECTOR, "*")
+            for child in child_elements:
+                child_fill = child.get_attribute('fill')
+                if child_fill:
+                    child_fill_lower = child_fill.lower()
+                    if any(color in child_fill_lower for color in yellow_colors):
+                        return True
+                        
+                # Also check child style
+                child_style = child.get_attribute('style')
+                if child_style:
+                    child_style_lower = child_style.lower()
+                    if any(color in child_style_lower for color in yellow_colors):
+                        return True
+            
+            # 5. Check if element has a class that might indicate it's selected/active
+            if any(keyword in class_lower for keyword in ['active', 'selected', 'current', 'highlighted']):
+                return True
+                    
+            return False
+            
+        except Exception:
+            return False
 
     def _first_text(self, selectors):
         for css in selectors:
