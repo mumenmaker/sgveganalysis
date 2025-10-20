@@ -15,6 +15,7 @@ CREATE TABLE restaurants (
     address TEXT,
     phone TEXT,
     website TEXT,
+    cow_reviews TEXT,
     description TEXT,
     cuisine_type TEXT,
     price_range TEXT,

@@ -206,8 +206,9 @@ class HappyCowDataExtractor:
             # Extract phone
             phone = self._extract_restaurant_phone(card)
             
-            # Extract website
+            # Extract website and HappyCow reviews link
             website = self._extract_restaurant_website(card)
+            cow_reviews = self._extract_happycow_reviews_link(card)
             
             # Extract rating
             rating = self._extract_restaurant_rating(card)
@@ -233,6 +234,7 @@ class HappyCowDataExtractor:
                 'cuisine_type': cuisine_type,
                 'hours': hours,
                 'description': description,
+                'cow_reviews': cow_reviews,
                 'is_vegan': is_vegan,
                 'is_vegetarian': is_vegetarian,
                 'has_veg_options': has_veg_options,
@@ -318,6 +320,35 @@ class HappyCowDataExtractor:
                 return website_elements[0].get_attribute('href')
             return ""
             
+        except Exception:
+            return ""
+
+    def _extract_happycow_reviews_link(self, card) -> str:
+        """Extract the HappyCow reviews/details link.
+        Accepts either relative '/reviews/...' or absolute 'https://www.happycow.net/reviews/...'.
+        Filters out Google Maps links and strips trailing '#' anchors.
+        """
+        try:
+            anchors = card.find_elements(By.CSS_SELECTOR, "a[href]")
+            for a in anchors:
+                href = (a.get_attribute('href') or '').strip()
+                if not href:
+                    continue
+                # Skip Google Maps or other non-HappyCow links
+                if 'google.com/maps' in href:
+                    continue
+                # Normalize to absolute HappyCow URL
+                if href.startswith('/reviews/'):
+                    url = f"https://www.happycow.net{href}"
+                elif href.startswith('https://www.happycow.net/reviews/') or href.startswith('http://www.happycow.net/reviews/'):
+                    url = href
+                else:
+                    continue
+                # Drop a single trailing '#'
+                if url.endswith('#'):
+                    url = url[:-1]
+                return url
+            return ""
         except Exception:
             return ""
     

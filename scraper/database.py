@@ -52,6 +52,7 @@ class DatabaseManager:
                 address TEXT,
                 phone VARCHAR(50),
                 website TEXT,
+                cow_reviews TEXT,
                 description TEXT,
                 cuisine_type VARCHAR(100),
                 price_range VARCHAR(50),

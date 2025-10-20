@@ -8,6 +8,7 @@ class Restaurant(BaseModel):
     address: Optional[str] = None
     phone: Optional[str] = None
     website: Optional[str] = None
+    cow_reviews: Optional[str] = None
     description: Optional[str] = None
     cuisine_type: Optional[str] = None
     price_range: Optional[str] = None

@@ -220,6 +220,7 @@ class HappyCowSectorScraper:
                         longitude=restaurant_data.get('longitude'),
                         phone=restaurant_data.get('phone', ''),
                         website=restaurant_data.get('website', ''),
+                        cow_reviews=restaurant_data.get('cow_reviews', ''),
                         rating=restaurant_data.get('rating', 0.0),
                         price_range=restaurant_data.get('price_range', ''),
                         cuisine_type=restaurant_data.get('cuisine_type', ''),
