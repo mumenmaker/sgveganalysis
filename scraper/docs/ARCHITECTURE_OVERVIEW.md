@@ -1,6 +1,6 @@
 # Architecture Overview
 
-This document provides a comprehensive overview of the HappyCow scraper architecture, including batch processing, progress tracking, and database integration.
+This document provides a comprehensive overview of the HappyCow scraper architecture, updated for sector-based scraping, per-sector saving, and Supabase-backed resume.
 
 ## System Architecture
 
@@ -10,16 +10,17 @@ This document provides a comprehensive overview of the HappyCow scraper architec
 ├─────────────────────────────────────────────────────────────┤
 │  Main Entry Point (main.py)                               │
 │  ├── Command-line interface                               │
-│  ├── Batch size configuration                             │
-│  ├── Session management                                    │
-│  └── Error handling                                        │
+│  ├── Sector orchestration                                 │
+│  ├── Session management (list/resume)                     │
+│  └── Error handling                                       │
 ├─────────────────────────────────────────────────────────────┤
-│  Core Library (hcowscraper/)                              │
-│  ├── VeggiemapScraper (orchestrator)                      │
-│  ├── MarkerExtractor (map interaction)                    │
-│  ├── RestaurantParser (data parsing)                      │
-│  ├── ClusterHandler (map expansion)                       │
-│  └── BatchProgressTracker (progress tracking)            │
+│  Core Library (sectorscraper/)                            │
+│  ├── sector_grid.py (6x8 grid)                            │
+│  ├── url_generator.py (sector URLs)                       │
+│  ├── page_loader.py (headless Selenium)                   │
+│  ├── data_extractor.py (DOM parsing)                      │
+│  ├── sector_scraper.py (per-sector save)                  │
+│  └── session_manager.py (Supabase progress + resume)      │
 ├─────────────────────────────────────────────────────────────┤
 │  Database Layer (database.py)                             │
 │  ├── Supabase integration                                 │

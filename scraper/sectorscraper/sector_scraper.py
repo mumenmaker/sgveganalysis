@@ -10,6 +10,7 @@ from .sector_grid import SingaporeSectorGrid
 from .url_generator import HappyCowURLGenerator
 from .page_loader import HappyCowPageLoader
 from .data_extractor import HappyCowDataExtractor
+from .session_manager import ScrapingSessionManager
 
 class HappyCowSectorScraper:
     """Main scraper that coordinates scraping all sectors"""
@@ -28,11 +29,73 @@ class HappyCowSectorScraper:
         self.scraped_sectors = []
         self.failed_sectors = []
         self.total_restaurants = 0
+        
+        # Session management
+        self.session_manager: Optional[ScrapingSessionManager] = None
+        self.current_session_id: Optional[str] = None
     
-    def scrape_all_sectors(self, start_sector: int = 0, max_sectors: Optional[int] = None, save_to_db: bool = True) -> List[Dict]:
+    def _setup_session_manager(self, db_manager) -> bool:
+        """Setup session manager for progress tracking"""
+        try:
+            self.session_manager = ScrapingSessionManager(db_manager)
+            return True
+        except Exception as e:
+            self.logger.error(f"Error setting up session manager: {e}")
+            return False
+    
+    def start_new_session(self, total_sectors: int, start_sector: int = 0) -> Optional[str]:
+        """Start a new scraping session"""
+        if not self.session_manager:
+            self.logger.error("Session manager not initialized")
+            return None
+        
+        session_id = self.session_manager.start_new_session(total_sectors, start_sector)
+        if session_id:
+            self.current_session_id = session_id
+            self.logger.info(f"Started new session: {session_id}")
+        return session_id
+    
+    def resume_session(self, session_id: str) -> bool:
+        """Resume an existing session"""
+        if not self.session_manager:
+            self.logger.error("Session manager not initialized")
+            return False
+        
+        if self.session_manager.resume_session(session_id):
+            self.current_session_id = session_id
+            self.logger.info(f"Resumed session: {session_id}")
+            return True
+        return False
+    
+    def get_session_progress(self) -> Dict:
+        """Get current session progress"""
+        if not self.session_manager:
+            return {}
+        return self.session_manager.get_session_progress()
+    
+    def scrape_all_sectors(self, start_sector: int = 0, max_sectors: Optional[int] = None, save_to_db: bool = True, session_id: Optional[str] = None) -> List[Dict]:
         """Scrape all sectors and optionally save to database after each sector"""
         try:
             self.logger.info("Starting comprehensive sector scraping")
+            
+            # Setup session management if save_to_db is enabled
+            if save_to_db and not self.session_manager:
+                from database import DatabaseManager
+                db_manager = DatabaseManager()
+                if not self._setup_session_manager(db_manager):
+                    self.logger.warning("Failed to setup session manager, continuing without progress tracking")
+            
+            # Handle session resume or start new session
+            if session_id:
+                if not self.resume_session(session_id):
+                    self.logger.error(f"Failed to resume session {session_id}")
+                    return []
+            elif save_to_db and self.session_manager:
+                # Start new session
+                total_sectors = max_sectors if max_sectors else 48
+                session_id = self.start_new_session(total_sectors, start_sector)
+                if not session_id:
+                    self.logger.warning("Failed to start new session, continuing without progress tracking")
             
             # Generate all sectors
             sectors = self.sector_grid.generate_sectors()
@@ -64,9 +127,17 @@ class HappyCowSectorScraper:
                         # Save to database immediately if requested
                         if save_to_db:
                             self._save_sector_to_database(sector_restaurants, sector_num)
+                        
+                        # Update session progress
+                        if self.session_manager:
+                            self.session_manager.update_sector_progress(sector_num, 'completed', len(sector_restaurants))
                     else:
                         self.logger.warning(f"Sector {sector_num} returned no restaurants")
                         self.failed_sectors.append(sector)
+                        
+                        # Update session progress for failed sector
+                        if self.session_manager:
+                            self.session_manager.update_sector_progress(sector_num, 'failed', 0)
                     
                     # Delay between sectors
                     if i < len(sectors) - 1:
@@ -75,7 +146,15 @@ class HappyCowSectorScraper:
                 except Exception as e:
                     self.logger.error(f"Error scraping sector {sector_num}: {e}")
                     self.failed_sectors.append(sector)
+                    
+                    # Update session progress for failed sector
+                    if self.session_manager:
+                        self.session_manager.update_sector_progress(sector_num, 'failed', 0)
                     continue
+            
+            # Complete session if all sectors processed
+            if self.session_manager and not max_sectors:
+                self.session_manager.complete_session()
             
             self.logger.info(f"Scraping completed: {len(all_restaurants)} total restaurants from {len(self.scraped_sectors)} sectors")
             return all_restaurants

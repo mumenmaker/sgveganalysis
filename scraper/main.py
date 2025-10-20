@@ -16,7 +16,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from config import Config
 from database import DatabaseManager
 from models import Restaurant
-from sectorscraper import HappyCowSectorScraper, SingaporeSectorGrid
+from sectorscraper import HappyCowSectorScraper, SingaporeSectorGrid, ScrapingSessionManager
 
 def setup_logging():
     """Setup logging configuration"""
@@ -188,6 +188,84 @@ def show_scraping_statistics(restaurants: List[dict]):
     print(f"   Vegetarian restaurants: {vegetarian_count}")
     print(f"   Veg-friendly restaurants: {veg_options_count}")
 
+def list_sessions():
+    """List available scraping sessions"""
+    print("📋 Available Scraping Sessions:")
+    
+    try:
+        db_manager = DatabaseManager()
+        if not db_manager.supabase:
+            print("❌ No database connection available")
+            return False
+        
+        session_manager = ScrapingSessionManager(db_manager)
+        sessions = session_manager.get_available_sessions()
+        
+        if not sessions:
+            print("   No sessions found")
+            return True
+        
+        for session in sessions:
+            status = "✅ Completed" if session['is_completed'] else "🔄 In Progress"
+            print(f"   Session: {session['session_id']}")
+            print(f"   Status: {status}")
+            print(f"   Started: {session['started_at']}")
+            print(f"   Progress: {session['completed_sectors']}/{session['total_sectors']} sectors")
+            print(f"   Failed: {session['failed_sectors']} sectors")
+            print(f"   Last Updated: {session['last_updated']}")
+            print()
+        
+        return True
+        
+    except Exception as e:
+        print(f"❌ Error listing sessions: {e}")
+        return False
+
+def resume_session(session_id: str):
+    """Resume a specific session"""
+    print(f"🔄 Resuming session: {session_id}")
+    
+    try:
+        scraper = HappyCowSectorScraper(headless=True, delay_between_sectors=2)
+        
+        # Setup session manager
+        db_manager = DatabaseManager()
+        if not scraper._setup_session_manager(db_manager):
+            print("❌ Failed to setup session manager")
+            return False
+        
+        # Resume the session
+        if not scraper.resume_session(session_id):
+            print(f"❌ Failed to resume session {session_id}")
+            return False
+        
+        # Get session progress
+        progress = scraper.get_session_progress()
+        if progress:
+            print(f"📊 Session Progress:")
+            print(f"   Total sectors: {progress['total_sectors']}")
+            print(f"   Completed: {progress['completed_sectors']}")
+            print(f"   Failed: {progress['failed_sectors']}")
+            print(f"   Current sector: {progress['current_sector']}")
+            print()
+        
+        # Continue scraping from where it left off
+        restaurants = scraper.scrape_all_sectors(session_id=session_id, save_to_db=True)
+        
+        if restaurants:
+            print(f"✅ Successfully resumed and completed session")
+            print(f"📊 Total restaurants: {len(restaurants)}")
+            return True
+        else:
+            print("❌ No restaurants found during resume")
+            return False
+            
+    except Exception as e:
+        print(f"❌ Error resuming session: {e}")
+        return False
+    finally:
+        scraper.page_loader.close_driver()
+
 def clear_database():
     """Clear database records and logs"""
     print("🗑️ Clearing database records and logs...")
@@ -233,6 +311,8 @@ def show_help():
     print("  python main.py scrape --start N        - Start from sector N")
     print("  python main.py scrape --max N           - Process maximum N sectors")
     print("  python main.py scrape --region REGION  - Scrape specific region")
+    print("  python main.py list-sessions          - List available scraping sessions")
+    print("  python main.py resume SESSION_ID      - Resume a specific session")
     print("  python main.py clear-db                - Clear database records and logs")
     print("  python main.py help                   - Show this help")
     print("  python main.py                        - Run full scraping (default)")
@@ -261,6 +341,17 @@ def main():
             return
         elif command == "test-sectors":
             test_sector_scraping()
+            return
+        elif command == "list-sessions":
+            list_sessions()
+            return
+        elif command == "resume":
+            if len(sys.argv) < 3:
+                print("❌ Session ID required for resume command")
+                print("Use 'python main.py list-sessions' to see available sessions")
+                return
+            session_id = sys.argv[2]
+            resume_session(session_id)
             return
         elif command == "scrape":
             # Parse scrape arguments

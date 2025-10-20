@@ -43,16 +43,16 @@
 3. Check if the same restaurant appears in multiple locations
 4. Use the `clear-db` command to start fresh
 
-### Batch Processing Issues
+### Per-Sector Saving / Progress Issues
 
-**Problem**: Batch processing fails or gets stuck
+**Problem**: Progress updates fail or scraping stalls on a sector
 
 **Solutions**:
-1. Check batch size is within limits (5-100)
-2. Verify database connection is stable
-3. Check if session is corrupted (use `list-sessions`)
-4. Resume from a working session or start fresh
-5. Monitor logs for batch-specific errors
+1. Verify database connection is stable
+2. Check if session is corrupted (use `list-sessions`)
+3. Resume with `resume SESSION_ID`
+4. Start a new session if the old one is completed
+5. Monitor logs for sector-specific errors
 
 ### Session Management Issues
 
@@ -60,7 +60,7 @@
 
 **Solutions**:
 1. Check session ID is correct (use `list-sessions`)
-2. Verify database has progress tracking data
+2. Verify database has progress tracking data (`scraping_progress`)
 3. Check if session was marked as completed
 4. Use `clear-db` to start fresh if needed
 
@@ -88,10 +88,10 @@ python main.py test-coords
 python main.py list-sessions
 
 # Resume interrupted session
-python main.py scrape --resume SESSION_ID
+python main.py resume SESSION_ID
 
-# Scrape with custom batch size
-python main.py scrape --batch-size 10
+# Start from sector / limit maximum sectors
+python main.py scrape --start 5 --max 10
 
 # Clear database and start fresh
 python main.py clear-db
