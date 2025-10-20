@@ -75,34 +75,29 @@ def test_sector_scraping():
         scraper.page_loader.close_driver()
 
 def scrape_restaurants(start_sector: int = 0, max_sectors: Optional[int] = None, region: Optional[str] = None):
-    """Scrape restaurants from all sectors"""
+    """Scrape restaurants from all sectors with immediate database saving"""
     print("🍽️ Starting comprehensive restaurant scraping...")
+    print("💾 Restaurants will be saved to database after each sector")
     
     try:
         scraper = HappyCowSectorScraper(headless=True, delay_between_sectors=2)
         
         if region:
             print(f"Scraping restaurants in region: {region}")
-            restaurants = scraper.scrape_sectors_by_region(region)
+            restaurants = scraper.scrape_sectors_by_region(region, save_to_db=True)
         else:
             print(f"Scraping restaurants from sectors {start_sector + 1} onwards")
             if max_sectors:
                 print(f"Maximum sectors to process: {max_sectors}")
-            restaurants = scraper.scrape_all_sectors(start_sector=start_sector, max_sectors=max_sectors)
+            restaurants = scraper.scrape_all_sectors(start_sector=start_sector, max_sectors=max_sectors, save_to_db=True)
         
         if restaurants:
             print(f"✅ Successfully scraped {len(restaurants)} restaurants")
+            print("✅ All restaurants have been saved to database during scraping")
             
-            # Save to database
-            if save_restaurants_to_database(restaurants):
-                print("✅ Restaurants saved to database")
-                
-                # Show statistics
-                show_scraping_statistics(restaurants)
-                return True
-            else:
-                print("❌ Failed to save restaurants to database")
-                return False
+            # Show statistics
+            show_scraping_statistics(restaurants)
+            return True
         else:
             print("❌ No restaurants found")
             return False

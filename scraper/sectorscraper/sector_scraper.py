@@ -29,8 +29,8 @@ class HappyCowSectorScraper:
         self.failed_sectors = []
         self.total_restaurants = 0
     
-    def scrape_all_sectors(self, start_sector: int = 0, max_sectors: Optional[int] = None) -> List[Dict]:
-        """Scrape all sectors and return all restaurants"""
+    def scrape_all_sectors(self, start_sector: int = 0, max_sectors: Optional[int] = None, save_to_db: bool = True) -> List[Dict]:
+        """Scrape all sectors and optionally save to database after each sector"""
         try:
             self.logger.info("Starting comprehensive sector scraping")
             
@@ -60,6 +60,10 @@ class HappyCowSectorScraper:
                         self.scraped_sectors.append(sector)
                         self.total_restaurants += len(sector_restaurants)
                         self.logger.info(f"Sector {sector_num} completed: {len(sector_restaurants)} restaurants")
+                        
+                        # Save to database immediately if requested
+                        if save_to_db:
+                            self._save_sector_to_database(sector_restaurants, sector_num)
                     else:
                         self.logger.warning(f"Sector {sector_num} returned no restaurants")
                         self.failed_sectors.append(sector)
@@ -115,7 +119,61 @@ class HappyCowSectorScraper:
             self.logger.error(f"Error scraping sector {sector['name']}: {e}")
             return []
     
-    def scrape_sectors_by_region(self, region: str) -> List[Dict]:
+    def _save_sector_to_database(self, restaurants: List[Dict], sector_num: int) -> bool:
+        """Save a sector's restaurants to the database immediately"""
+        try:
+            from database import DatabaseManager
+            from models import Restaurant
+            
+            db_manager = DatabaseManager()
+            if not db_manager.supabase:
+                self.logger.error("No database connection available")
+                return False
+            
+            # Convert to Restaurant models
+            restaurant_models = []
+            for restaurant_data in restaurants:
+                try:
+                    restaurant = Restaurant(
+                        name=restaurant_data.get('name', 'Unknown Restaurant'),
+                        address=restaurant_data.get('address', 'Address not available'),
+                        latitude=restaurant_data.get('latitude'),
+                        longitude=restaurant_data.get('longitude'),
+                        phone=restaurant_data.get('phone', ''),
+                        website=restaurant_data.get('website', ''),
+                        rating=restaurant_data.get('rating', 0.0),
+                        price_range=restaurant_data.get('price_range', ''),
+                        cuisine_type=restaurant_data.get('cuisine_type', ''),
+                        hours=restaurant_data.get('hours', ''),
+                        description=restaurant_data.get('description', ''),
+                        is_vegan=restaurant_data.get('is_vegan', False),
+                        is_vegetarian=restaurant_data.get('is_vegetarian', False),
+                        has_veg_options=restaurant_data.get('has_veg_options', False)
+                    )
+                    restaurant_models.append(restaurant)
+                except Exception as e:
+                    self.logger.warning(f"Skipping invalid restaurant data: {e}")
+                    continue
+            
+            if not restaurant_models:
+                self.logger.warning(f"No valid restaurant models to save for sector {sector_num}")
+                return False
+            
+            # Insert restaurants
+            success, inserted, skipped = db_manager.insert_restaurants(restaurant_models)
+            
+            if success:
+                self.logger.info(f"Sector {sector_num} saved to database: {inserted} inserted, {skipped} skipped")
+                return True
+            else:
+                self.logger.error(f"Failed to save sector {sector_num} to database")
+                return False
+                
+        except Exception as e:
+            self.logger.error(f"Error saving sector {sector_num} to database: {e}")
+            return False
+    
+    def scrape_sectors_by_region(self, region: str, save_to_db: bool = True) -> List[Dict]:
         """Scrape sectors in a specific region"""
         try:
             self.logger.info(f"Scraping sectors in region: {region}")
@@ -139,6 +197,10 @@ class HappyCowSectorScraper:
                         all_restaurants.extend(sector_restaurants)
                         self.scraped_sectors.append(sector)
                         self.total_restaurants += len(sector_restaurants)
+                        
+                        # Save to database immediately if requested
+                        if save_to_db:
+                            self._save_sector_to_database(sector_restaurants, i+1)
                     
                     # Delay between sectors
                     if i < len(sectors) - 1:
