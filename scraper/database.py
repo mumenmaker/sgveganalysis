@@ -206,28 +206,48 @@ class DatabaseManager:
             self.logger.error("No Supabase connection available")
             return []
         try:
-            # phone or description missing and cow_reviews present
-            query = (
-                self.supabase
-                .table('restaurants')
-                .select('*')
-                .is_('phone', 'null')
-                .or_("description.is.null,description.eq.")
-                .not_.is_('cow_reviews', 'null')
-                .limit(limit)
-            )
-            result = query.execute()
-            return result.data or []
+            # Get restaurants with cow_reviews that are missing key enhancement fields
+            result = self.supabase.table('restaurants').select('*').not_.is_('cow_reviews', 'null').not_.eq('cow_reviews', '').limit(limit * 3).execute()
+            rows = result.data or []
+            
+            # Filter for restaurants missing key enhancement fields
+            incomplete_restaurants = []
+            for row in rows:
+                # Check if any key enhancement fields are missing
+                missing_fields = []
+                
+                # Core fields that can be enhanced
+                if not row.get('phone') or not row.get('phone').strip():
+                    missing_fields.append('phone')
+                if not row.get('address') or not row.get('address').strip():
+                    missing_fields.append('address')
+                if not row.get('description') or not row.get('description').strip():
+                    missing_fields.append('description')
+                if not row.get('category') or not row.get('category').strip():
+                    missing_fields.append('category')
+                if not row.get('price_range') or not row.get('price_range').strip():
+                    missing_fields.append('price_range')
+                if not row.get('rating') or row.get('rating') == 0:
+                    missing_fields.append('rating')
+                if not row.get('review_count') or row.get('review_count') == 0:
+                    missing_fields.append('review_count')
+                if not row.get('hours') or not row.get('hours').strip():
+                    missing_fields.append('hours')
+                if not row.get('features') or len(row.get('features', [])) == 0:
+                    missing_fields.append('features')
+                if not row.get('images_links') or len(row.get('images_links', [])) == 0:
+                    missing_fields.append('images_links')
+                
+                # Only include if missing at least one field
+                if missing_fields:
+                    row['missing_fields'] = missing_fields  # Add for debugging
+                    incomplete_restaurants.append(row)
+            
+            return incomplete_restaurants[:limit]
+            
         except Exception as e:
-            # Fallback: manual filter without .or_ chaining support in client
-            try:
-                result = self.supabase.table('restaurants').select('*').limit(limit * 5).execute()
-                rows = result.data or []
-                filtered = [r for r in rows if (not r.get('phone') or not r.get('description')) and r.get('cow_reviews')]
-                return filtered[:limit]
-            except Exception as ex:
-                self.logger.error(f"Error getting incomplete restaurants: {e} / {ex}")
-                return []
+            self.logger.error(f"Error getting incomplete restaurants: {e}")
+            return []
 
     def update_restaurant_fields(self, restaurant_id: int, fields: dict) -> bool:
         """Update specific fields for a restaurant by id"""

@@ -213,10 +213,15 @@ def enhance_restaurants(limit: int = None):
             for r in rows:
                 rid = r.get('id')
                 url = r.get('cow_reviews')
+                missing_fields = r.get('missing_fields', [])
                 if not rid or not url:
                     continue
+                
+                print(f"🔄 Enhancing {r.get('name', 'Unknown')} (missing: {', '.join(missing_fields)})")
+                
                 details = enhancer.fetch_details(url)
                 if not details:
+                    print(f"  ❌ Failed to fetch details")
                     continue
 
                 fields = {
@@ -242,6 +247,9 @@ def enhance_restaurants(limit: int = None):
 
                 if db.update_restaurant_fields(rid, fields):
                     updated_count += 1
+                    print(f"  ✅ Enhanced successfully")
+                else:
+                    print(f"  ❌ Failed to update database")
 
         finally:
             enhancer.close()
