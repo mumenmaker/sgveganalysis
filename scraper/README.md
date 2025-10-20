@@ -1,6 +1,6 @@
 # HappyCow Singapore Restaurant Scraper
 
-A Python scraper that extracts restaurant data from HappyCow for Singapore and stores it in a Supabase database.
+A Python scraper that extracts restaurant data from HappyCow's veggiemap for Singapore and stores it in a Supabase database with batch processing and progress tracking.
 
 ## Quick Start
 
@@ -26,31 +26,47 @@ Run the database setup script in your Supabase SQL Editor:
 
 ### 4. Run the Scraper
 ```bash
-# Run the scraper
+# Basic scraping with default batch size (20)
 python main.py
 
-# Or use command-line options:
-python main.py test      # Test database connection
-python main.py clear     # Clear progress and start fresh
-python main.py clear-db  # Clear database records and progress
-python main.py status    # Show current scraping status
-python main.py 100       # Run scraper with max_pages=100
-python main.py           # Run scraper with default max_pages=50
+# Scraping with custom batch size
+python main.py scrape --batch-size 50
+
+# Resume interrupted scraping session
+python main.py scrape --resume SESSION_ID
+
+# List available scraping sessions
+python main.py list-sessions
+
+# Test database connection
+python main.py test
+
+# Test coordinate extraction only
+python main.py test-coords
+
+# Clear database and start fresh
+python main.py clear-db
+
+# Show help
+python main.py help
 ```
 
 ## Project Structure
 
 ```
 scraper/
-├── main.py                    # Main scraper script
-├── happycow_scraper.py        # Core scraping logic
+├── main.py                    # Main scraper script with batch processing
 ├── database.py                # Database operations
 ├── models.py                  # Data models
-├── config.py                  # Configuration
-├── progress_tracker.py        # Progress tracking
+├── config.py                  # Configuration with batch settings
+├── hcowscraper/               # Core scraping library
+│   ├── veggiemap_scraper.py   # Main scraper class
+│   ├── marker_extractor.py   # Marker extraction logic
+│   ├── restaurant_parser.py  # Restaurant data parsing
+│   ├── cluster_handler.py    # Map cluster expansion
+│   └── batch_progress_tracker.py # Batch processing & progress tracking
 ├── database/                  # Database setup files
 ├── debug/                     # Debug and testing files
-├── examples/                  # Example usage files
 ├── tests/                     # Test files
 ├── logs/                      # Runtime logs and data
 └── docs/                      # Documentation
@@ -58,26 +74,40 @@ scraper/
 
 ## Features
 
-- ✅ Scrapes restaurant data from HappyCow's Singapore search results
-- ✅ Stores data in Supabase database with proper schema
-- ✅ Coordinate-based duplicate prevention
-- ✅ Resume functionality for interrupted scraping
-- ✅ Rate limiting and error handling
-- ✅ JSON backup of scraped data
-- ✅ Database management options (clear, status, test)
+- ✅ **Veggiemap Integration**: Scrapes from HappyCow's interactive veggiemap
+- ✅ **Batch Processing**: Processes restaurants in configurable batches (5-100)
+- ✅ **Progress Tracking**: Saves progress after each batch with session management
+- ✅ **Resume Functionality**: Resume interrupted scraping sessions
+- ✅ **Cluster Expansion**: Automatically zooms in to extract individual restaurants
+- ✅ **Coordinate Extraction**: Multiple methods for reliable coordinate extraction
+- ✅ **Database Integration**: Stores data in Supabase with proper schema
+- ✅ **Duplicate Prevention**: Coordinate-based unique constraints
+- ✅ **Error Handling**: Comprehensive error handling and recovery
+- ✅ **Session Management**: Track and manage multiple scraping sessions
+
+## Batch Processing
+
+The scraper processes restaurants in configurable batches for better reliability:
+
+- **Default batch size**: 20 restaurants per batch
+- **Configurable range**: 5-100 restaurants per batch
+- **Progress tracking**: Saves progress after each batch
+- **Session management**: Unique session IDs for tracking
+- **Resume capability**: Continue interrupted sessions
+
+### Batch Processing Flow:
+1. Extract all markers from the veggiemap
+2. Process markers in batches (e.g., 20 at a time)
+3. Insert each batch to database immediately
+4. Update progress tracking after each batch
+5. Complete session when all batches processed
 
 ## Documentation
 
 - **Full Documentation**: `docs/README.md`
 - **Database Setup**: `database/DATABASE_SETUP.md`
-- **Project Organization**: `docs/PROJECT_ORGANIZATION.md`
-- **Coordinate Fixes**: `docs/COORDINATE_AND_DUPLICATE_FIXES.md`
-- **Unique Constraints**: `docs/COORDINATE_UNIQUE_CONSTRAINT.md`
-
-## Examples
-
-- **Basic Usage**: `examples/example_usage.py`
-- **Resume Functionality**: `examples/resume_example.py`
+- **Development Guide**: `docs/DEVELOPMENT.md`
+- **Troubleshooting**: `docs/TROUBLESHOOTING.md`
 
 ## Testing
 

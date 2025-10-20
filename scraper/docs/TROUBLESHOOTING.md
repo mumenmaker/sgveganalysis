@@ -11,6 +11,7 @@
 2. Verify your Supabase project is active
 3. Check your internet connection
 4. Ensure your Supabase credentials have the correct permissions
+5. Run the database setup scripts in Supabase SQL Editor
 
 ### Selenium Issues
 
@@ -42,15 +43,37 @@
 3. Check if the same restaurant appears in multiple locations
 4. Use the `clear-db` command to start fresh
 
+### Batch Processing Issues
+
+**Problem**: Batch processing fails or gets stuck
+
+**Solutions**:
+1. Check batch size is within limits (5-100)
+2. Verify database connection is stable
+3. Check if session is corrupted (use `list-sessions`)
+4. Resume from a working session or start fresh
+5. Monitor logs for batch-specific errors
+
+### Session Management Issues
+
+**Problem**: Cannot resume interrupted sessions
+
+**Solutions**:
+1. Check session ID is correct (use `list-sessions`)
+2. Verify database has progress tracking data
+3. Check if session was marked as completed
+4. Use `clear-db` to start fresh if needed
+
 ### Memory Issues
 
 **Problem**: Scraper runs out of memory
 
 **Solutions**:
-1. Reduce batch size for database inserts
+1. Reduce batch size (use `--batch-size 10`)
 2. Clear progress more frequently
-3. Use pagination to limit memory usage
+3. Use smaller batch sizes for large datasets
 4. Close browser instances properly
+5. Monitor system resources during scraping
 
 ## Debug Commands
 
@@ -58,11 +81,23 @@
 # Test database connection
 python main.py test
 
+# Test coordinate extraction only
+python main.py test-coords
+
+# List available scraping sessions
+python main.py list-sessions
+
+# Resume interrupted session
+python main.py scrape --resume SESSION_ID
+
+# Scrape with custom batch size
+python main.py scrape --batch-size 10
+
 # Clear database and start fresh
 python main.py clear-db
 
-# Check current status
-python main.py status
+# Show help and all options
+python main.py help
 
 # Run with debug logging
 python -c "import logging; logging.basicConfig(level=logging.DEBUG)"

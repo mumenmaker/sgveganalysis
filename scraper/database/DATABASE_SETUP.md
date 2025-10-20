@@ -1,7 +1,7 @@
 # Database Setup Guide
 
 ## Overview
-This guide helps you set up the Supabase database for the HappyCow Singapore Restaurant Scraper with coordinate-based duplicate prevention.
+This guide helps you set up the Supabase database for the HappyCow Singapore Restaurant Scraper with coordinate-based duplicate prevention and batch processing progress tracking.
 
 ## 🆕 **NEW: Coordinate-Based Unique Constraint**
 
@@ -57,9 +57,11 @@ python main.py
 - Has indexes for better performance on common queries
 
 ### `scraping_progress` table:
-- Tracks scraping progress and sessions
-- Stores session information and statistics
-- Helps with resume functionality and progress tracking
+- **Session Management**: Tracks unique scraping sessions with IDs
+- **Batch Processing**: Monitors batch progress and completion
+- **Progress Tracking**: Stores current batch, total batches, processed count
+- **Resume Functionality**: Enables resuming interrupted scraping sessions
+- **Error Handling**: Records error messages and session status
 
 ## 🆕 **New Features**
 
@@ -68,10 +70,18 @@ python main.py
 - **Fallback logic**: Name + address checking when coordinates are missing
 - **Smart duplicate detection**: Prevents same location, allows different locations
 
+### Batch Processing & Progress Tracking:
+- **Session Management**: Unique session IDs for each scraping run
+- **Batch Processing**: Configurable batch sizes (5-100 restaurants)
+- **Progress Tracking**: Real-time progress updates after each batch
+- **Resume Functionality**: Continue interrupted sessions from where they left off
+- **Error Recovery**: Handle database errors and session corruption gracefully
+
 ### Enhanced Data Model:
 - **Coordinate fields**: `latitude` and `longitude` for precise location tracking
 - **Performance indexes**: Fast queries on coordinates, ratings, and restaurant types
 - **Flexible constraints**: Handles missing coordinates gracefully
+- **Progress tracking**: Comprehensive session and batch management
 
 ## Troubleshooting
 
@@ -104,7 +114,41 @@ Once the tables are created:
 1. **Coordinate extraction** will work automatically
 2. **Duplicate prevention** will prevent same locations
 3. **Franchise support** will allow same names at different locations
-4. **Resume functionality** will work with coordinate-based tracking
-5. **Query capabilities** will be enhanced with location data
+4. **Batch processing** will handle large datasets efficiently
+5. **Progress tracking** will enable resume functionality
+6. **Session management** will track multiple scraping attempts
+7. **Query capabilities** will be enhanced with location data
 
-The scraper is now **coordinate-aware** and **duplicate-resistant**!
+The scraper is now **coordinate-aware**, **duplicate-resistant**, and **batch-processed**!
+
+## Usage Examples
+
+### Basic Scraping
+```bash
+# Start new scraping session with default batch size
+python main.py scrape
+
+# Custom batch size for better performance
+python main.py scrape --batch-size 50
+```
+
+### Session Management
+```bash
+# List available sessions
+python main.py list-sessions
+
+# Resume interrupted session
+python main.py scrape --resume SESSION_ID
+
+# Clear all data and start fresh
+python main.py clear-db
+```
+
+### Testing
+```bash
+# Test database connection
+python main.py test
+
+# Test coordinate extraction
+python main.py test-coords
+```

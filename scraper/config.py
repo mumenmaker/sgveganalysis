@@ -14,6 +14,11 @@ class Config:
     MAX_RETRIES = int(os.getenv('MAX_RETRIES', '3'))
     USER_AGENT_ROTATION = os.getenv('USER_AGENT_ROTATION', 'True').lower() == 'true'
     
+    # Batch Processing Configuration
+    DEFAULT_BATCH_SIZE = int(os.getenv('DEFAULT_BATCH_SIZE', '20'))
+    MIN_BATCH_SIZE = 5
+    MAX_BATCH_SIZE = 100
+    
     # HappyCow URLs
     BASE_URL = "https://www.happycow.net"
     VEGGIEMAP_URL = "https://www.happycow.net/veggiemap"
