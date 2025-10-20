@@ -200,14 +200,20 @@ class DatabaseManager:
             self.logger.error(f"Error getting restaurants: {e}")
             return []
 
-    def get_incomplete_restaurants(self, limit: int = 50) -> List[dict]:
+    def get_incomplete_restaurants(self, limit: int = 50, start_id: int = None) -> List[dict]:
         """Fetch restaurants missing key fields and having a cow_reviews link"""
         if not self.supabase:
             self.logger.error("No Supabase connection available")
             return []
         try:
             # Get restaurants with cow_reviews that are missing key enhancement fields
-            result = self.supabase.table('restaurants').select('*').not_.is_('cow_reviews', 'null').not_.eq('cow_reviews', '').limit(limit * 3).execute()
+            query = self.supabase.table('restaurants').select('*').not_.is_('cow_reviews', 'null').not_.eq('cow_reviews', '')
+            
+            # Add start_id filter if provided
+            if start_id:
+                query = query.gte('id', start_id)
+            
+            result = query.limit(limit * 3).execute()
             rows = result.data or []
             
             # Filter for restaurants missing key enhancement fields

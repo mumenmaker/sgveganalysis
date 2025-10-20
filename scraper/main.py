@@ -189,9 +189,11 @@ def show_scraping_statistics(restaurants: List[dict]):
     print(f"   Vegetarian restaurants: {vegetarian_count}")
     print(f"   Veg-friendly restaurants: {veg_options_count}")
 
-def enhance_restaurants(limit: int = None):
+def enhance_restaurants(limit: int = None, start_id: int = None):
     """Enhance existing rows by scraping their cow_reviews pages for missing fields"""
     print("🧩 Enhancing existing restaurant rows from cow_reviews pages...")
+    if start_id:
+        print(f"📍 Starting from restaurant ID: {start_id}")
     try:
         db = DatabaseManager()
         if not db.supabase:
@@ -200,7 +202,7 @@ def enhance_restaurants(limit: int = None):
 
         # Use a very large limit if none specified to get all rows
         effective_limit = limit if limit is not None else 10000
-        rows = db.get_incomplete_restaurants(limit=effective_limit)
+        rows = db.get_incomplete_restaurants(limit=effective_limit, start_id=start_id)
         if not rows:
             print("✅ Nothing to enhance (no rows with missing fields or cow_reviews)")
             return True
@@ -426,6 +428,8 @@ def show_help():
     print("  python main.py clear-db --include-sessions  - Also clear scraping_progress sessions")
     print("  python main.py enhance                - Enhance all existing rows via cow_reviews page")
     print("  python main.py enhance --limit N       - Enhance only N rows (default: all rows)")
+    print("  python main.py enhance --start-id N    - Start enhancement from restaurant ID N")
+    print("  python main.py enhance --limit N --start-id M  - Enhance N rows starting from ID M")
     print("  python main.py help                   - Show this help")
     print("  python main.py                        - Run full scraping (default)")
     print("")
@@ -499,19 +503,47 @@ def main():
             scrape_restaurants(start_sector=start_sector, max_sectors=max_sectors, region=region)
             return
         elif command == "enhance":
-            # Parse limit argument
+            # Parse enhance arguments
             limit = None
-            if len(sys.argv) > 2:
-                try:
-                    if sys.argv[2] == "--limit" and len(sys.argv) > 3:
-                        limit = int(sys.argv[3])
-                    elif sys.argv[2].startswith("--limit="):
-                        limit = int(sys.argv[2].split("=")[1])
-                except ValueError:
-                    print("❌ Invalid limit value. Please provide a positive integer.")
+            start_id = None
+            
+            i = 2
+            while i < len(sys.argv):
+                arg = sys.argv[i]
+                if arg == "--limit" and i + 1 < len(sys.argv):
+                    try:
+                        limit = int(sys.argv[i + 1])
+                        i += 2
+                    except ValueError:
+                        print("❌ Invalid limit value. Please provide a positive integer.")
+                        return
+                elif arg.startswith("--limit="):
+                    try:
+                        limit = int(arg.split("=")[1])
+                        i += 1
+                    except ValueError:
+                        print("❌ Invalid limit value. Please provide a positive integer.")
+                        return
+                elif arg == "--start-id" and i + 1 < len(sys.argv):
+                    try:
+                        start_id = int(sys.argv[i + 1])
+                        i += 2
+                    except ValueError:
+                        print("❌ Invalid start-id value. Please provide a positive integer.")
+                        return
+                elif arg.startswith("--start-id="):
+                    try:
+                        start_id = int(arg.split("=")[1])
+                        i += 1
+                    except ValueError:
+                        print("❌ Invalid start-id value. Please provide a positive integer.")
+                        return
+                else:
+                    print(f"❌ Unknown argument: {arg}")
+                    print("Use 'python main.py help' for available options")
                     return
             
-            enhance_restaurants(limit=limit)
+            enhance_restaurants(limit=limit, start_id=start_id)
             return
         elif command == "clear-db":
             # Optional flag: --include-sessions
