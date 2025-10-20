@@ -3,70 +3,71 @@ Tests for the HappyCow scraper
 """
 import pytest
 from unittest.mock import Mock, patch
-from happycow_scraper import HappyCowScraper
+from hcowscraper import VeggiemapScraper
 
 def test_scraper_initialization():
     """Test scraper initialization"""
-    scraper = HappyCowScraper()
+    scraper = VeggiemapScraper()
     
-    assert scraper.progress_tracker is not None
     assert hasattr(scraper, 'logger')
+    assert hasattr(scraper, 'marker_extractor')
+    assert hasattr(scraper, 'restaurant_parser')
 
-def test_scraper_initialization_without_resume():
-    """Test scraper initialization without resume functionality"""
-    scraper = HappyCowScraper(enable_resume=False)
+def test_scraper_initialization_without_database():
+    """Test scraper initialization without database"""
+    scraper = VeggiemapScraper(enable_database=False)
     
-    assert scraper.progress_tracker is None
+    assert scraper.db_manager is None
 
-def test_parse_restaurant_data_valid(sample_restaurant_data):
+def test_restaurant_parser_valid(sample_restaurant_data):
     """Test parsing valid restaurant data"""
-    scraper = HappyCowScraper()
-    restaurant = scraper.parse_restaurant_data(sample_restaurant_data)
+    scraper = VeggiemapScraper()
+    restaurant = scraper.restaurant_parser.parse_marker_data(sample_restaurant_data)
     
     assert restaurant is not None
     assert restaurant.name == 'Test Vegan Restaurant'
     assert restaurant.is_vegan == True
 
-def test_parse_restaurant_data_invalid():
+def test_restaurant_parser_invalid():
     """Test parsing invalid restaurant data"""
-    scraper = HappyCowScraper()
+    scraper = VeggiemapScraper()
     
     # Test with empty data
-    restaurant = scraper.parse_restaurant_data({})
+    restaurant = scraper.restaurant_parser.parse_marker_data({})
     assert restaurant is None
     
     # Test with None
-    restaurant = scraper.parse_restaurant_data(None)
+    restaurant = scraper.restaurant_parser.parse_marker_data(None)
     assert restaurant is None
     
     # Test with missing name
-    restaurant = scraper.parse_restaurant_data({'address': '123 Test St'})
+    restaurant = scraper.restaurant_parser.parse_marker_data({'address': '123 Test St'})
     assert restaurant is None
 
-def test_parse_restaurant_data_coordinates():
+def test_restaurant_parser_coordinates():
     """Test parsing restaurant data with coordinates"""
-    scraper = HappyCowScraper()
+    scraper = VeggiemapScraper()
     
     data = {
         'name': 'Test Restaurant',
-        'latitude': '1.3521',
-        'longitude': '103.8198'
+        'latitude': 1.3521,
+        'longitude': 103.8198
     }
     
-    restaurant = scraper.parse_restaurant_data(data)
+    restaurant = scraper.restaurant_parser.parse_marker_data(data)
     
     assert restaurant.latitude == 1.3521
     assert restaurant.longitude == 103.8198
 
-def test_parse_restaurant_data_no_coordinates():
+def test_restaurant_parser_no_coordinates():
     """Test parsing restaurant data without coordinates"""
-    scraper = HappyCowScraper()
+    scraper = VeggiemapScraper()
     
     data = {
         'name': 'Test Restaurant'
     }
     
-    restaurant = scraper.parse_restaurant_data(data)
+    restaurant = scraper.restaurant_parser.parse_marker_data(data)
     
-    assert restaurant.latitude is None
-    assert restaurant.longitude is None
+    # Restaurant parser requires coordinates, so it should return None
+    assert restaurant is None

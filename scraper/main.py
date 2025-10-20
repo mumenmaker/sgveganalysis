@@ -1,16 +1,14 @@
 #!/usr/bin/env python3
 """
-HappyCow Singapore Restaurant Scraper - Clean Version
-Ready for new veggiemap implementation
+HappyCow Singapore Restaurant Scraper
+Scrapes restaurant data from HappyCow veggiemap and stores it in Supabase database
 """
 
 import logging
 import os
 import sys
-from typing import List
-from happycow_scraper import HappyCowScraper
-from database import DatabaseManager
-from models import Restaurant
+from hcowscraper import VeggiemapScraper
+from config import Config
 
 def setup_logging():
     """Setup logging configuration"""
@@ -31,8 +29,8 @@ def test_database_connection():
     print("🔍 Testing database connection...")
     
     try:
-        db_manager = DatabaseManager()
-        if db_manager.supabase:
+        scraper = VeggiemapScraper(enable_database=True)
+        if scraper.test_database_connection():
             print("✅ Database connection successful!")
             return True
         else:
@@ -42,6 +40,117 @@ def test_database_connection():
         print(f"❌ Database connection error: {e}")
         return False
 
+def test_coordinates_only():
+    """Test coordinate extraction only (faster for testing)"""
+    print("🗺️ Testing coordinate extraction...")
+    
+    try:
+        scraper = VeggiemapScraper(enable_database=False)
+        url = f"{Config.VEGGIEMAP_URL}?" + "&".join([f"{k}={v}" for k, v in Config.SINGAPORE_VEGGIEMAP_PARAMS.items()])
+        
+        coordinates = scraper.scrape_with_coordinates_only(url)
+        
+        if coordinates:
+            print(f"✅ Found {len(coordinates)} coordinates")
+            print("Sample coordinates:")
+            for i, coord in enumerate(coordinates[:5], 1):
+                print(f"  {i}. Lat: {coord.get('latitude')}, Lng: {coord.get('longitude')}")
+            return True
+        else:
+            print("❌ No coordinates found")
+            return False
+            
+    except Exception as e:
+        print(f"❌ Coordinate extraction error: {e}")
+        return False
+
+def scrape_restaurants():
+    """Scrape restaurants from veggiemap"""
+    print("🍽️ Starting restaurant scraping from HappyCow veggiemap...")
+    
+    try:
+        scraper = VeggiemapScraper(enable_database=True)
+        
+        # Build URL
+        url = f"{Config.VEGGIEMAP_URL}?" + "&".join([f"{k}={v}" for k, v in Config.SINGAPORE_VEGGIEMAP_PARAMS.items()])
+        print(f"Scraping from: {url}")
+        
+        # Scrape restaurants with cluster expansion
+        restaurants = scraper.scrape_singapore_restaurants(url, use_cluster_expansion=True)
+        
+        if restaurants:
+            print(f"✅ Successfully scraped {len(restaurants)} restaurants")
+            
+            # Show statistics
+            stats = scraper.get_restaurant_statistics()
+            if "error" not in stats:
+                print(f"📊 Database statistics:")
+                print(f"   Total restaurants: {stats['total_restaurants']}")
+                print(f"   With coordinates: {stats['with_coordinates']}")
+                print(f"   Vegan restaurants: {stats['vegan_restaurants']}")
+                print(f"   Coordinate coverage: {stats['coordinate_coverage']:.1f}%")
+            
+            return True
+        else:
+            print("❌ No restaurants found")
+            return False
+            
+    except Exception as e:
+        print(f"❌ Scraping error: {e}")
+        return False
+
+def clear_database():
+    """Clear database records and logs"""
+    print("🗑️ Clearing database records and logs...")
+    
+    try:
+        scraper = VeggiemapScraper(enable_database=True)
+        
+        if scraper.db_manager and scraper.db_manager.supabase:
+            # Delete all restaurants
+            result = scraper.db_manager.supabase.table('restaurants').delete().neq('id', 0).execute()
+            print("✅ Successfully deleted all restaurant records from database")
+            
+            # Remove log files
+            log_dir = 'logs'
+            if os.path.exists(log_dir):
+                for filename in os.listdir(log_dir):
+                    file_path = os.path.join(log_dir, filename)
+                    if os.path.isfile(file_path) and (filename.endswith('.log') or filename.endswith('.json')):
+                        os.remove(file_path)
+                        print(f"   Removed {file_path}")
+            
+            print("✅ Database cleared successfully!")
+            print("   - All restaurant records deleted")
+            print("   - Log files removed")
+            print("   - Ready for fresh scraping")
+            return True
+        else:
+            print("❌ No database connection available")
+            return False
+            
+    except Exception as e:
+        print(f"❌ Error clearing database: {e}")
+        return False
+
+def show_help():
+    """Show help information"""
+    print("HappyCow Singapore Restaurant Scraper")
+    print("=====================================")
+    print("Commands:")
+    print("  python main.py test        - Test database connection")
+    print("  python main.py test-coords - Test coordinate extraction only")
+    print("  python main.py scrape      - Scrape restaurants from veggiemap")
+    print("  python main.py clear-db    - Clear database records and logs")
+    print("  python main.py help        - Show this help")
+    print("  python main.py             - Run full scraping (default)")
+    print("")
+    print("The scraper will:")
+    print("  - Load the HappyCow veggiemap for Singapore")
+    print("  - Zoom in systematically to expand marker clusters")
+    print("  - Extract individual restaurant coordinates and data")
+    print("  - Save results to your Supabase database")
+
 def main():
     """Main function to run the scraper"""
     setup_logging()
@@ -49,145 +158,50 @@ def main():
     
     # Parse command line arguments
     if len(sys.argv) > 1:
-        if sys.argv[1] == "test":
+        command = sys.argv[1].lower()
+        
+        if command == "test":
             test_database_connection()
             return
-        elif sys.argv[1] == "clear":
-            # Clear progress and start fresh
-            setup_logging()
-            logger = logging.getLogger(__name__)
-            logger.info("Progress cleared. Starting fresh scraping session...")
-            from progress_tracker import ProgressTracker
-            tracker = ProgressTracker()
-            tracker.clear_progress()
-            print("✅ Progress cleared successfully!")
+        elif command == "test-coords":
+            test_coordinates_only()
             return
-        elif sys.argv[1] == "clear-db":
-            # Clear database records
-            setup_logging()
-            logger = logging.getLogger(__name__)
-            logger.info("Clearing database records...")
-
-            from database import DatabaseManager
-            db_manager = DatabaseManager()
-
-            if db_manager.supabase:
-                try:
-                    # Delete all restaurants
-                    result = db_manager.supabase.table('restaurants').delete().neq('id', 0).execute()
-                    logger.info(f"Successfully deleted all restaurant records from database")
-
-                    # Also clear progress
-                    from progress_tracker import ProgressTracker
-                    tracker = ProgressTracker()
-                    tracker.clear_progress()
-                    logger.info("Progress tracking also cleared")
-
-                    # Remove log files
-                    log_dir = 'logs'
-                    if os.path.exists(log_dir):
-                        for filename in os.listdir(log_dir):
-                            file_path = os.path.join(log_dir, filename)
-                            if os.path.isfile(file_path) and (filename.endswith('.log') or filename.endswith('.json')):
-                                os.remove(file_path)
-                                logger.info(f"Removed {file_path}")
-                    logger.info("Log files and progress files cleared")
-
-                    print("✅ Database cleared successfully!")
-                    print("   - All restaurant records deleted")
-                    print("   - Progress tracking cleared")
-                    print("   - Log files removed")
-                    print("   - Ready for fresh scraping")
-                    return
-
-                except Exception as e:
-                    logger.error(f"Error clearing database: {e}")
-                    print(f"❌ Error clearing database: {e}")
-                    sys.exit(1)
-            else:
-                logger.error("No database connection available")
-                print("❌ No database connection available")
-                sys.exit(1)
-        elif sys.argv[1] == "status":
-            # Show current scraping status
-            setup_logging()
-            logger = logging.getLogger(__name__)
-            from progress_tracker import ProgressTracker
-            tracker = ProgressTracker()
-            progress_info = tracker.get_resume_info()
-            
-            if progress_info['can_resume']:
-                print("📊 Current Scraping Status:")
-                print(f"   Started: {progress_info['started_at']}")
-                print(f"   Last updated: {progress_info['last_updated']}")
-                print(f"   Total restaurants found: {progress_info['total_restaurants']}")
-                print(f"   Scraped restaurants: {progress_info['scraped_count']}")
-                print(f"   Failed restaurants: {progress_info['failed_count']}")
-                print(f"   Progress: {tracker.get_progress_summary()}")
-            else:
-                print("📊 No active scraping session found")
+        elif command == "scrape":
+            scrape_restaurants()
+            return
+        elif command == "clear-db":
+            clear_database()
+            return
+        elif command == "help":
+            show_help()
+            return
+        else:
+            print(f"Unknown command: {command}")
+            print("Use 'python main.py help' for available commands")
             return
     
+    # Default: run full scraping
     logger.info("Starting HappyCow Singapore Restaurant Scraper")
+    print("🚀 Starting HappyCow Singapore Restaurant Scraper")
+    print("=" * 60)
     
     try:
-        # Initialize scraper and database
-        from database import DatabaseManager
-        scraper = HappyCowScraper()
-        db_manager = DatabaseManager()
-        
-        # Check database connection
-        if not db_manager.supabase:
-            logger.error("Database connection failed. Please check your Supabase credentials.")
-            return False
-        
-        # Create tables if they don't exist
-        logger.info("Setting up database tables...")
-        if not db_manager.create_tables():
-            logger.error("Failed to create database tables")
-            return False
-        
-        # Check for resume option
-        resume_info = scraper.progress_tracker.get_resume_info() if scraper.progress_tracker else None
-        if resume_info and resume_info['can_resume']:
-            logger.info("Previous scraping session detected. Resuming...")
-            logger.info(f"Progress: {scraper.progress_tracker.get_progress_summary()}")
-        
-        # Scrape restaurants
-        logger.info("Starting to scrape restaurants from HappyCow...")
-        restaurants = scraper.scrape_singapore_restaurants(resume=True)
-        
-        if not restaurants:
-            logger.warning("No restaurants found. Scraper implementation pending.")
-            return False
-        
-        logger.info(f"Successfully scraped {len(restaurants)} restaurants")
-        
-        # Save to JSON file as backup
-        scraper.save_to_json(restaurants, 'logs/singapore_restaurants.json', append=True)
-        
-        # Display summary
-        logger.info("=== SCRAPING COMPLETE ===")
-        logger.info(f"Total restaurants scraped: {len(restaurants)}")
-        
-        # Show some statistics
-        vegan_count = sum(1 for r in restaurants if r.is_vegan)
-        vegetarian_count = sum(1 for r in restaurants if r.is_vegetarian)
-        veg_options_count = sum(1 for r in restaurants if r.has_veg_options)
-        
-        logger.info(f"Vegan restaurants: {vegan_count}")
-        logger.info(f"Vegetarian restaurants: {vegetarian_count}")
-        logger.info(f"Restaurants with veg options: {veg_options_count}")
-        
-        return True
-        
+        success = scrape_restaurants()
+        if success:
+            print("\n🎉 Scraping completed successfully!")
+            print("Check your Supabase database for the results.")
+        else:
+            print("\n❌ Scraping failed")
+            print("Check the logs for more details.")
+            sys.exit(1)
+            
     except KeyboardInterrupt:
         logger.info("Scraping interrupted by user")
-        return False
+        print("\n⏹️ Scraping interrupted by user")
     except Exception as e:
         logger.error(f"Unexpected error: {e}")
-        return False
+        print(f"\n❌ Unexpected error: {e}")
+        sys.exit(1)
 
 if __name__ == "__main__":
-    success = main()
-    sys.exit(0 if success else 1)
+    main()
