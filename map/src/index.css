@@ -25,6 +25,27 @@ html, body, #root {
   width: 100%;
 }
 
+/* Prevent popup from causing map shifts */
+.leaflet-popup {
+  pointer-events: none !important;
+}
+
+.leaflet-popup-content-wrapper {
+  pointer-events: auto !important;
+  border-radius: 8px !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+}
+
+.leaflet-popup-tip {
+  pointer-events: none !important;
+}
+
+/* Custom popup styling */
+.custom-popup .leaflet-popup-content {
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
 .custom-div-icon {
   background: transparent !important;
   border: none !important;

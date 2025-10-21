@@ -176,6 +176,8 @@ const RestaurantMap: React.FC<RestaurantMapProps> = ({ filters }) => {
         zoom={11}
         className="h-full w-full"
         scrollWheelZoom={true}
+        zoomControl={true}
+        attributionControl={true}
       >
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
@@ -196,7 +198,14 @@ const RestaurantMap: React.FC<RestaurantMapProps> = ({ filters }) => {
               }
             }}
           >
-            <Popup>
+            <Popup 
+              autoPan={false}
+              closeOnClick={false}
+              autoClose={false}
+              keepInView={false}
+              maxWidth={320}
+              className="custom-popup"
+            >
               <div className="w-80 p-2">
                 <Card className="bg-white/95 backdrop-blur-sm border-green-200 shadow-lg">
                   <CardHeader className="pb-3">
