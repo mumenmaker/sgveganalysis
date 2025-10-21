@@ -2,6 +2,15 @@
 
 Sector-based Selenium scraper for HappyCow's search map (Singapore), with per-sector saving and Supabase-backed resume capability.
 
+## What this does
+
+- Scrapes HappyCow's search map for Singapore using a 48-sector grid
+- Extracts restaurant details from DOM cards with `data-marker-id` and `.details.hidden`
+- Saves results to Supabase `restaurants` (unique on `(latitude, longitude)`) immediately after each sector
+- Tracks scraping sessions in Supabase `scraping_progress`
+- Supports listing sessions and resuming incomplete runs
+- Enhances restaurant data from individual review pages
+
 ## Quick Start
 
 ### 1. Install Dependencies
@@ -70,7 +79,8 @@ scraper/
 │   ├── page_loader.py         # Headless Selenium loader
 │   ├── data_extractor.py      # Extracts details from DOM
 │   ├── sector_scraper.py      # Per-sector extraction + DB save
-│   └── session_manager.py     # Session tracking + resume
+│   ├── session_manager.py     # Session tracking + resume
+│   └── reviews_enhancer.py    # Restaurant data enhancement
 ├── database/                  # Database setup files
 ├── debug/                     # Debug and testing files
 ├── tests/                     # Test files
@@ -86,6 +96,9 @@ scraper/
 - ✅ **Resume runs**: `list-sessions` and `resume SESSION_ID`
 - ✅ **Duplicate handling**: DB unique constraint on `(latitude, longitude)`
 - ✅ **Headless**: Selenium runs without opening a Chrome window
+- ✅ **Restaurant enhancement**: Extract detailed data from review pages
+- ✅ **Smart filtering**: Only enhance restaurants missing 2+ fields
+- ✅ **Progress tracking**: Time estimation and completion tracking
 
 ## How resume works
 
