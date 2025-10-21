@@ -2,6 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Checkbox } from './ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Slider } from './ui/slider';
+import ReactSelect from 'react-select';
 import type { RestaurantFilters as FilterType } from '../types/restaurant';
 
 interface RestaurantFiltersProps {
@@ -172,6 +173,90 @@ const RestaurantFilters: React.FC<RestaurantFiltersProps> = ({ filters, onFilter
               : `Show ${filters.min_rating}+ star restaurants`
             }
           </div>
+        </div>
+
+        {/* Features Filter */}
+        <div className="space-y-3">
+          <label className="text-sm font-semibold text-green-700 uppercase tracking-wide">
+            🏷️ Features
+          </label>
+          <ReactSelect
+            isMulti
+            options={[
+              // Dietary preferences
+              { value: 'Vegan-friendly', label: '🌱 Vegan-friendly' },
+              { value: 'Vegan', label: '🌱 Vegan' },
+              { value: 'Lacto', label: '🥛 Lacto' },
+              { value: 'Ovo', label: '🥚 Ovo' },
+              { value: 'Gluten-free', label: '🌾 Gluten-free' },
+              { value: 'Organic', label: '🌿 Organic' },
+              { value: 'Raw', label: '🥗 Raw' },
+              { value: 'Macrobiotic', label: '🍚 Macrobiotic' },
+              // Cuisine types
+              { value: 'Chinese', label: '🥢 Chinese' },
+              { value: 'Japanese', label: '🍣 Japanese' },
+              { value: 'Korean', label: '🍲 Korean' },
+              { value: 'Thai', label: '🌶️ Thai' },
+              { value: 'Indian', label: '🍛 Indian' },
+              { value: 'Vietnamese', label: '🍜 Vietnamese' },
+              { value: 'Indonesian', label: '🍛 Indonesian' },
+              { value: 'Malaysian', label: '🍜 Malaysian' },
+              { value: 'Singaporean', label: '🇸🇬 Singaporean' },
+              // Service types
+              { value: 'Fast food', label: '⚡ Fast food' },
+              { value: 'Take-out', label: '📦 Take-out' },
+              { value: 'Delivery', label: '🚚 Delivery' },
+              { value: 'Buffet', label: '🍽️ Buffet' },
+              { value: 'Breakfast', label: '🌅 Breakfast' },
+              { value: 'Catering', label: '🎉 Catering' },
+              // Other features
+              { value: 'Salad bar', label: '🥗 Salad bar' },
+              { value: 'Juice bar', label: '🥤 Juice bar' },
+              { value: 'Bakery', label: '🥖 Bakery' },
+              { value: 'Pizza', label: '🍕 Pizza' },
+              { value: 'Beer/Wine', label: '🍺 Beer/Wine' },
+              { value: 'Fusion', label: '🌍 Fusion' },
+              { value: 'International', label: '🌐 International' }
+            ]}
+            value={filters.features?.map(feature => ({ value: feature, label: feature })) || []}
+            onChange={(selectedOptions) => {
+              const selectedFeatures = selectedOptions?.map(option => option.value) || [];
+              onFiltersChange({ ...filters, features: selectedFeatures });
+            }}
+            placeholder="Select features..."
+            className="text-sm"
+            styles={{
+              control: (base) => ({
+                ...base,
+                borderColor: '#86efac',
+                '&:hover': {
+                  borderColor: '#22c55e'
+                },
+                '&:focus': {
+                  borderColor: '#22c55e',
+                  boxShadow: '0 0 0 2px rgba(34, 197, 94, 0.2)'
+                }
+              }),
+              multiValue: (base) => ({
+                ...base,
+                backgroundColor: '#dcfce7',
+                borderRadius: '6px'
+              }),
+              multiValueLabel: (base) => ({
+                ...base,
+                color: '#166534',
+                fontSize: '12px'
+              }),
+              multiValueRemove: (base) => ({
+                ...base,
+                color: '#166534',
+                '&:hover': {
+                  backgroundColor: '#22c55e',
+                  color: 'white'
+                }
+              })
+            }}
+          />
         </div>
 
         {/* Clear Filters */}

@@ -26,21 +26,22 @@ export const fetchRestaurants = async (): Promise<Restaurant[]> => {
   return data || [];
 };
 
-// Debug function to see what price ranges exist in the database
-export const getAvailablePriceRanges = async (): Promise<string[]> => {
+// Debug function to see what features exist in the database
+export const getAvailableFeatures = async (): Promise<string[]> => {
   const { data, error } = await supabase
     .from('restaurants')
-    .select('price_range')
-    .not('price_range', 'is', null)
-    .not('price_range', 'eq', '');
+    .select('features')
+    .not('features', 'is', null);
 
   if (error) {
-    console.error('Error fetching price ranges:', error);
+    console.error('Error fetching features:', error);
     return [];
   }
 
-  const priceRanges = [...new Set(data?.map(r => r.price_range) || [])];
-  return priceRanges;
+  // Flatten all features arrays and get unique values
+  const allFeatures = data?.flatMap(r => r.features || []) || [];
+  const uniqueFeatures = [...new Set(allFeatures)].filter(Boolean);
+  return uniqueFeatures;
 };
 
 export const fetchRestaurantsWithFilters = async (filters: {
@@ -51,6 +52,7 @@ export const fetchRestaurantsWithFilters = async (filters: {
   category?: string;
   price_range?: string;
   min_rating?: number;
+  features?: string[];
 }): Promise<Restaurant[]> => {
   let query = supabase
     .from('restaurants')
@@ -94,6 +96,13 @@ export const fetchRestaurantsWithFilters = async (filters: {
 
   if (filters.min_rating) {
     query = query.gte('rating', filters.min_rating);
+  }
+
+  // Handle features filtering (array contains any of the selected features)
+  if (filters.features && filters.features.length > 0) {
+    // Use OR logic for features - restaurant must have at least one of the selected features
+    const featureConditions = filters.features.map(feature => `features.cs.{${feature}}`);
+    query = query.or(featureConditions.join(','));
   }
 
   const { data, error } = await query.order('name');

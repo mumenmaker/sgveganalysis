@@ -32,4 +32,5 @@ export interface RestaurantFilters {
   category?: string;
   price_range?: string;
   min_rating?: number;
+  features?: string[];
 }
