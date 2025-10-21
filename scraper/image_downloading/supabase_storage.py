@@ -30,13 +30,13 @@ class SupabaseStorageManager:
         try:
             # Try to get bucket info
             buckets = self.supabase.storage.list_buckets()
-            bucket_names = [bucket['name'] for bucket in buckets]
+            bucket_names = [bucket.name if hasattr(bucket, 'name') else bucket.get('name', '') for bucket in buckets]
             
             if self.bucket_name in bucket_names:
                 print(f"✅ Bucket '{self.bucket_name}' already exists")
                 return True
             
-            # Try to create bucket (this might fail due to RLS policies)
+            # Try to create bucket with service role
             try:
                 result = self.supabase.storage.create_bucket(
                     self.bucket_name,
@@ -55,10 +55,7 @@ class SupabaseStorageManager:
                     return False
                     
             except Exception as create_error:
-                # If bucket creation fails due to RLS, assume it exists or will be created manually
-                print(f"⚠️  Bucket creation failed (likely due to RLS policies): {create_error}")
-                print(f"ℹ️  Please create bucket '{self.bucket_name}' manually in Supabase dashboard")
-                print(f"ℹ️  Or disable RLS for storage.objects table temporarily")
+                print(f"⚠️  Bucket creation failed: {create_error}")
                 
                 # Try to test if we can access the bucket anyway
                 try:
@@ -68,6 +65,7 @@ class SupabaseStorageManager:
                     return True
                 except Exception as access_error:
                     print(f"❌ Cannot access bucket '{self.bucket_name}': {access_error}")
+                    print(f"ℹ️  Please create bucket '{self.bucket_name}' manually in Supabase dashboard")
                     return False
                 
         except Exception as e:
@@ -89,25 +87,43 @@ class SupabaseStorageManager:
             # Create full path
             file_path = f"{self.storage_folder}/{filename}"
             
-            # Upload file
-            result = self.supabase.storage.from_(self.bucket_name).upload(
-                file_path,
-                image_bytes,
-                file_options={
-                    'content-type': 'image/jpeg',
-                    'cache-control': 'max-age=31536000'  # 1 year cache
-                }
-            )
-            
-            if result:
-                # Get public URL
-                public_url = self.supabase.storage.from_(self.bucket_name).get_public_url(file_path)
-                print(f"✅ Uploaded: {filename} -> {public_url}")
-                return public_url
-            else:
-                print(f"❌ Failed to upload: {filename}")
-                return None
-                
+            # Upload file with retry logic
+            max_retries = 3
+            for attempt in range(max_retries):
+                try:
+                    result = self.supabase.storage.from_(self.bucket_name).upload(
+                        file_path,
+                        image_bytes,
+                        file_options={
+                            'content-type': 'image/jpeg',
+                            'cache-control': 'max-age=31536000'  # 1 year cache
+                        }
+                    )
+                    
+                    if result:
+                        # Get public URL
+                        public_url = self.supabase.storage.from_(self.bucket_name).get_public_url(file_path)
+                        print(f"✅ Uploaded: {filename} -> {public_url}")
+                        return public_url
+                    else:
+                        print(f"❌ Failed to upload: {filename}")
+                        return None
+                        
+                except Exception as upload_error:
+                    if "row-level security policy" in str(upload_error).lower():
+                        print(f"⚠️  RLS policy error for {filename} (attempt {attempt + 1}/{max_retries})")
+                        if attempt < max_retries - 1:
+                            print(f"   Retrying in 2 seconds...")
+                            import time
+                            time.sleep(2)
+                            continue
+                        else:
+                            print(f"❌ RLS policy blocking upload after {max_retries} attempts")
+                            print(f"   Please set up storage bucket manually (see MANUAL_SETUP.md)")
+                            return None
+                    else:
+                        raise upload_error
+                        
         except Exception as e:
             print(f"❌ Error uploading {filename}: {e}")
             return None

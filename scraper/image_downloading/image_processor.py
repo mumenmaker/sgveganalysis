@@ -30,6 +30,11 @@ class ImageProcessor:
             Image bytes or None if download failed
         """
         try:
+            # Skip SVG placeholder images
+            if url.endswith('.svg') or 'placeholder' in url.lower():
+                print(f"⚠️  Skipping placeholder/SVG image: {url}")
+                return None
+            
             response = self.session.get(url, timeout=DOWNLOAD_TIMEOUT, stream=True)
             response.raise_for_status()
             

@@ -56,6 +56,7 @@ class DatabaseManager:
             return True
         
         try:
+            # Try to update with original_image_urls field
             result = self.supabase.table('restaurants').update({
                 'original_image_urls': original_urls
             }).eq('id', restaurant_id).execute()
@@ -68,8 +69,13 @@ class DatabaseManager:
                 return False
                 
         except Exception as e:
-            print(f"❌ Error backing up URLs for restaurant {restaurant_id}: {e}")
-            return False
+            # If the column doesn't exist, skip backup but continue processing
+            if "original_image_urls" in str(e):
+                print(f"⚠️  Skipping backup (column doesn't exist): {e}")
+                return True
+            else:
+                print(f"❌ Error backing up URLs for restaurant {restaurant_id}: {e}")
+                return False
     
     def update_restaurant_images(self, restaurant_id: int, new_urls: List[str]) -> bool:
         """
