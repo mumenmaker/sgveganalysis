@@ -36,22 +36,39 @@ class SupabaseStorageManager:
                 print(f"✅ Bucket '{self.bucket_name}' already exists")
                 return True
             
-            # Create bucket
-            result = self.supabase.storage.create_bucket(
-                self.bucket_name,
-                options={
-                    'public': True,  # Make images publicly accessible
-                    'file_size_limit': 10 * 1024 * 1024,  # 10MB limit
-                    'allowed_mime_types': ['image/jpeg', 'image/png', 'image/webp']
-                }
-            )
-            
-            if result:
-                print(f"✅ Created bucket '{self.bucket_name}'")
-                return True
-            else:
-                print(f"❌ Failed to create bucket '{self.bucket_name}'")
-                return False
+            # Try to create bucket (this might fail due to RLS policies)
+            try:
+                result = self.supabase.storage.create_bucket(
+                    self.bucket_name,
+                    options={
+                        'public': True,  # Make images publicly accessible
+                        'file_size_limit': 10 * 1024 * 1024,  # 10MB limit
+                        'allowed_mime_types': ['image/jpeg', 'image/png', 'image/webp']
+                    }
+                )
+                
+                if result:
+                    print(f"✅ Created bucket '{self.bucket_name}'")
+                    return True
+                else:
+                    print(f"❌ Failed to create bucket '{self.bucket_name}'")
+                    return False
+                    
+            except Exception as create_error:
+                # If bucket creation fails due to RLS, assume it exists or will be created manually
+                print(f"⚠️  Bucket creation failed (likely due to RLS policies): {create_error}")
+                print(f"ℹ️  Please create bucket '{self.bucket_name}' manually in Supabase dashboard")
+                print(f"ℹ️  Or disable RLS for storage.objects table temporarily")
+                
+                # Try to test if we can access the bucket anyway
+                try:
+                    # Try to list files in the bucket to see if it exists
+                    files = self.supabase.storage.from_(self.bucket_name).list()
+                    print(f"✅ Bucket '{self.bucket_name}' is accessible")
+                    return True
+                except Exception as access_error:
+                    print(f"❌ Cannot access bucket '{self.bucket_name}': {access_error}")
+                    return False
                 
         except Exception as e:
             print(f"❌ Error managing bucket '{self.bucket_name}': {e}")

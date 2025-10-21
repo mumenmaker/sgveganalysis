@@ -5,6 +5,11 @@ Convenience script to run the image downloader with common configurations.
 
 import os
 import sys
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv(os.path.join(os.path.dirname(__file__), '.env'))
+
 from image_downloader import ImageDownloader
 
 
