@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import L from 'leaflet';
 import type { Restaurant } from '../types/restaurant';
@@ -17,56 +17,63 @@ const RestaurantImage: React.FC<{
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
 
+  // Reset loading state when imageUrl changes
+  React.useEffect(() => {
+    setIsLoading(true);
+    setHasError(false);
+  }, [imageUrl]);
+
   return (
     <div className="relative group">
-      {isLoading && !hasError && (
-        <div className="w-20 h-20 bg-gray-100 rounded-lg border border-gray-200 flex items-center justify-center">
-          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-green-500"></div>
-        </div>
-      )}
-      
-      {hasError ? (
-        <div 
-          className="w-20 h-20 bg-gradient-to-br from-green-100 to-green-200 rounded-lg border border-green-300 flex items-center justify-center cursor-pointer hover:bg-gradient-to-br hover:from-green-200 hover:to-green-300 transition-all duration-200"
-          onClick={() => window.open(imageUrl, '_blank')}
-          title="Click to view image"
-        >
-          <div className="text-center">
-            <div className="text-lg">📷</div>
-            <div className="text-xs text-green-700 font-medium">View Image</div>
+      {/* Main image container */}
+      <div className="relative">
+        {isLoading && !hasError && (
+          <div className="w-16 h-16 bg-gray-100 rounded-lg border border-gray-200 flex items-center justify-center">
+            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-green-500"></div>
           </div>
-        </div>
-      ) : (
-        <img
-          src={imageUrl}
-          alt={`${restaurantName} photo ${index + 1}`}
-          className={`w-20 h-20 object-cover rounded-lg border border-gray-200 hover:border-green-300 transition-colors cursor-pointer ${isLoading ? 'hidden' : 'block'}`}
-          loading="lazy"
-          onLoad={() => {
-            setIsLoading(false);
-            setHasError(false);
-          }}
-          onError={() => {
-            setIsLoading(false);
-            setHasError(true);
-          }}
-          onClick={() => window.open(imageUrl, '_blank')}
-          crossOrigin="anonymous"
-          referrerPolicy="no-referrer"
-        />
-      )}
-      
-      {!isLoading && !hasError && (
-        <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 rounded-lg transition-all duration-200 flex items-center justify-center">
-          <div className="opacity-0 group-hover:opacity-100 transition-opacity">
-            <div className="bg-white bg-opacity-90 rounded-full p-1">
-              <svg className="w-4 h-4 text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" />
-              </svg>
+        )}
+        
+        {hasError ? (
+          <div 
+            className="w-16 h-16 bg-gradient-to-br from-green-100 to-green-200 rounded-lg border border-green-300 flex items-center justify-center cursor-pointer hover:bg-gradient-to-br hover:from-green-200 hover:to-green-300 transition-all duration-200"
+            onClick={() => window.open(imageUrl, '_blank')}
+            title="Click to view image"
+          >
+            <div className="text-center">
+              <div className="text-sm">📷</div>
+              <div className="text-xs text-green-700 font-medium">View</div>
             </div>
           </div>
-        </div>
-      )}
+        ) : (
+          <div className="relative">
+            <img
+              src={imageUrl}
+              alt={`${restaurantName} photo ${index + 1}`}
+              className="w-16 h-16 object-cover rounded-lg border border-gray-200 hover:border-green-300 transition-colors cursor-pointer"
+              crossOrigin="anonymous"
+              referrerPolicy="no-referrer"
+            onLoad={(e) => {
+              setIsLoading(false);
+              setHasError(false);
+            }}
+            onError={(e) => {
+              setIsLoading(false);
+              setHasError(true);
+            }}
+              onClick={() => window.open(imageUrl, '_blank')}
+              style={{ 
+                display: 'block' // Always show the image
+              }}
+            />
+            
+          </div>
+        )}
+        
+        {/* Simple hover effect - just a subtle border change */}
+        {!isLoading && !hasError && (
+          <div className="absolute inset-0 rounded-lg border-2 border-transparent group-hover:border-green-300 transition-colors duration-200 pointer-events-none"></div>
+        )}
+      </div>
     </div>
   );
 };
@@ -190,26 +197,24 @@ const RestaurantMap: React.FC<RestaurantMapProps> = ({ filters }) => {
             position={[restaurant.latitude!, restaurant.longitude!]}
             icon={createCustomIcon(restaurant)}
             eventHandlers={{
-              mouseover: (e) => {
+              click: (e) => {
                 e.target.openPopup();
-              },
-              mouseout: (e) => {
-                e.target.closePopup();
               }
             }}
           >
             <Popup 
-              autoPan={false}
-              closeOnClick={false}
-              autoClose={false}
-              keepInView={false}
+              autoPan={true}
+              closeOnClick={true}
+              autoClose={true}
+              keepInView={true}
               maxWidth={320}
+              maxHeight={400}
               className="custom-popup"
             >
-              <div className="w-80 p-2">
+              <div className="w-80 p-2 max-h-96 overflow-y-auto">
                 <Card className="bg-white/95 backdrop-blur-sm border-green-200 shadow-lg">
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-lg text-green-800">{restaurant.name}</CardTitle>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-base text-green-800">{restaurant.name}</CardTitle>
                     <div className="flex flex-wrap gap-2 mt-2">
                       {restaurant.is_vegan && (
                         <Badge variant="default" className="bg-green-500 text-white border-green-600">🌱 Vegan</Badge>
@@ -223,7 +228,7 @@ const RestaurantMap: React.FC<RestaurantMapProps> = ({ filters }) => {
                     </div>
                   </CardHeader>
                   
-                  <CardContent className="space-y-2">
+                  <CardContent className="space-y-1">
                     {restaurant.address && (
                       <div className="flex items-start gap-2 text-sm text-gray-600">
                         <MapPin className="h-4 w-4 mt-0.5 flex-shrink-0" />
@@ -286,9 +291,11 @@ const RestaurantMap: React.FC<RestaurantMapProps> = ({ filters }) => {
                     )}
                     
                     {restaurant.images_links && restaurant.images_links.length > 0 && (
-                      <div className="mt-3">
-                        <div className="text-sm font-medium text-gray-700 mb-2">Photos:</div>
-                        <div className="flex gap-2">
+                      <div className="mt-2">
+                        <div className="text-xs font-medium text-gray-700 mb-1">Photos:</div>
+                        
+                        
+                        <div className="flex gap-1">
                           {restaurant.images_links.slice(0, 2).map((imageUrl, index) => (
                             <RestaurantImage
                               key={index}
@@ -298,7 +305,7 @@ const RestaurantMap: React.FC<RestaurantMapProps> = ({ filters }) => {
                             />
                           ))}
                           {restaurant.images_links.length > 2 && (
-                            <div className="w-20 h-20 bg-gray-100 rounded-lg border border-gray-200 flex items-center justify-center cursor-pointer hover:bg-gray-200 transition-colors">
+                            <div className="w-16 h-16 bg-gray-100 rounded-lg border border-gray-200 flex items-center justify-center cursor-pointer hover:bg-gray-200 transition-colors">
                               <div className="text-center">
                                 <div className="text-xs font-medium text-gray-600">+{restaurant.images_links.length - 2}</div>
                                 <div className="text-xs text-gray-500">more</div>
