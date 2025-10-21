@@ -24,6 +24,8 @@ Run the database setup script in your Supabase SQL Editor:
 - Copy contents from `database/setup_fresh_database.sql`
 - Paste and run in Supabase SQL Editor
 
+**📋 Database Documentation**: See `database/README.md` for complete schema details, models, and usage examples.
+
 ### 4. Run the Scraper
 ```bash
 # Scrape all 48 sectors (headless)

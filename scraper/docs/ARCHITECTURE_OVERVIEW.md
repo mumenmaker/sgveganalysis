@@ -1,6 +1,6 @@
 # Architecture Overview
 
-This document provides a comprehensive overview of the HappyCow scraper architecture, updated for sector-based scraping, per-sector saving, and Supabase-backed resume.
+This document provides a comprehensive overview of the HappyCow scraper architecture, updated for sector-based scraping, per-sector saving, Supabase-backed resume, and restaurant data enhancement.
 
 ## System Architecture
 
@@ -12,6 +12,7 @@ This document provides a comprehensive overview of the HappyCow scraper architec
 │  ├── Command-line interface                               │
 │  ├── Sector orchestration                                 │
 │  ├── Session management (list/resume)                     │
+│  ├── Enhancement orchestration                            │
 │  └── Error handling                                       │
 ├─────────────────────────────────────────────────────────────┤
 │  Core Library (sectorscraper/)                            │
@@ -20,13 +21,15 @@ This document provides a comprehensive overview of the HappyCow scraper architec
 │  ├── page_loader.py (headless Selenium)                   │
 │  ├── data_extractor.py (DOM parsing)                      │
 │  ├── sector_scraper.py (per-sector save)                  │
-│  └── session_manager.py (Supabase progress + resume)      │
+│  ├── session_manager.py (Supabase progress + resume)      │
+│  └── reviews_enhancer.py (restaurant enhancement)        │
 ├─────────────────────────────────────────────────────────────┤
 │  Database Layer (database.py)                             │
 │  ├── Supabase integration                                 │
 │  ├── Restaurant data storage                              │
 │  ├── Progress tracking                                    │
-│  └── Duplicate prevention                                 │
+│  ├── Duplicate prevention                                 │
+│  └── Enhancement filtering                                │
 ├─────────────────────────────────────────────────────────────┤
 │  Data Models (models.py)                                  │
 │  ├── Restaurant model                                     │
@@ -37,104 +40,126 @@ This document provides a comprehensive overview of the HappyCow scraper architec
 
 ## Core Components
 
-### 1. VeggiemapScraper (Main Orchestrator)
-**File**: `hcowscraper/veggiemap_scraper.py`
+### 1. HappyCowSectorScraper (Main Orchestrator)
+**File**: `sectorscraper/sector_scraper.py`
 
 **Responsibilities**:
-- Coordinates the entire scraping workflow
-- Manages batch processing logic
+- Coordinates the entire sector-based scraping workflow
+- Manages per-sector processing and saving
 - Handles session initialization and completion
 - Integrates all other components
 
 **Key Methods**:
-- `scrape_singapore_restaurants()`: Main scraping method with batch processing
-- `scrape_with_coordinates_only()`: Fast coordinate extraction for testing
-- `test_database_connection()`: Database connectivity testing
+- `scrape_all_sectors()`: Main scraping method for all sectors
+- `scrape_single_sector()`: Process individual sector
+- `scrape_sectors_by_region()`: Process specific regions
 
-### 2. MarkerExtractor (Map Interaction)
-**File**: `hcowscraper/marker_extractor.py`
-
-**Responsibilities**:
-- Loads HappyCow veggiemap pages
-- Performs cluster expansion and zooming
-- Extracts coordinates using multiple methods
-- Handles Selenium WebDriver management
-
-**Key Methods**:
-- `extract_markers_with_cluster_expansion()`: Main extraction with cluster expansion
-- `extract_markers_by_attributes()`: Direct attribute extraction
-- `extract_markers_by_page_source()`: Regex-based extraction
-- `extract_markers_by_javascript()`: JavaScript-based extraction
-
-### 3. RestaurantParser (Data Processing)
-**File**: `hcowscraper/restaurant_parser.py`
+### 2. SingaporeSectorGrid (Grid Management)
+**File**: `sectorscraper/sector_grid.py`
 
 **Responsibilities**:
-- Converts marker data to Restaurant objects
-- Validates coordinates and required fields
-- Handles data cleaning and normalization
-- Manages batch parsing operations
+- Generates 6x8 grid covering Singapore
+- Defines sector boundaries and centers
+- Manages geographic coordinates
+- Handles region-based filtering
 
 **Key Methods**:
-- `parse_marker_data()`: Parse single marker to Restaurant
-- `parse_multiple_markers()`: Parse batch of markers
+- `generate_sectors()`: Create all 48 sectors
+- `get_sector_center()`: Get center coordinates for sector
+- `get_sectors_by_region()`: Filter sectors by region
+
+### 3. HappyCowURLGenerator (URL Management)
+**File**: `sectorscraper/url_generator.py`
+
+**Responsibilities**:
+- Builds searchmap URLs for each sector
+- Manages URL parameters and coordinates
+- Handles URL validation and formatting
+
+**Key Methods**:
+- `generate_sector_url()`: Create URL for specific sector
+- `build_searchmap_url()`: Construct complete searchmap URL
+
+### 4. HappyCowPageLoader (Page Loading)
+**File**: `sectorscraper/page_loader.py`
+
+**Responsibilities**:
+- Loads HappyCow searchmap pages using Selenium
+- Manages headless Chrome WebDriver
+- Handles page loading and waiting
+- Manages browser lifecycle
+
+**Key Methods**:
+- `load_page()`: Load specific URL
+- `wait_for_page_load()`: Wait for page to be ready
+- `close()`: Clean up browser resources
+
+### 5. HappyCowDataExtractor (Data Extraction)
+**File**: `sectorscraper/data_extractor.py`
+
+**Responsibilities**:
+- Extracts restaurant data from loaded pages
+- Parses `[data-marker-id]` and `.details.hidden` elements
+- Handles coordinate extraction and validation
+- Manages data cleaning and normalization
+
+**Key Methods**:
+- `extract_restaurants_from_page()`: Main extraction method
+- `_extract_restaurant_info_from_card()`: Parse individual restaurant
+- `_extract_coordinates()`: Extract lat/lng coordinates
+
+### 6. ReviewsEnhancer (Restaurant Enhancement)
+**File**: `sectorscraper/reviews_enhancer.py`
+
+**Responsibilities**:
+- Scrapes individual restaurant review pages
+- Extracts detailed information (phone, address, description, etc.)
+- Handles enhancement data processing
+- Manages review page navigation
+
+**Key Methods**:
+- `fetch_details()`: Main enhancement method
+- `_parse_page()`: Parse review page data
 - `_extract_*()`: Individual field extraction methods
 
-### 4. ClusterHandler (Map Expansion)
-**File**: `hcowscraper/cluster_handler.py`
-
-**Responsibilities**:
-- Manages systematic map zooming
-- Handles cluster expansion logic
-- Extracts individual restaurant markers
-- Manages zoom level transitions
-
-**Key Methods**:
-- `expand_all_clusters()`: Systematic cluster expansion
-- `get_individual_markers()`: Extract individual markers
-- `_zoom_in()`: Zoom management
-- `_get_current_zoom_level()`: Zoom level detection
-
-### 5. BatchProgressTracker (Progress Management)
-**File**: `hcowscraper/batch_progress_tracker.py`
+### 7. ScrapingSessionManager (Session Management)
+**File**: `sectorscraper/session_manager.py`
 
 **Responsibilities**:
 - Manages scraping sessions with unique IDs
-- Tracks batch progress and completion
+- Tracks sector progress and completion
 - Enables resume functionality
 - Handles error recovery
 
 **Key Methods**:
-- `start_scraping_session()`: Initialize new session
-- `resume_scraping_session()`: Resume interrupted session
-- `process_batch()`: Process and track batch completion
-- `complete_scraping_session()`: Mark session as completed
+- `start_session()`: Initialize new session
+- `resume_session()`: Resume interrupted session
+- `update_progress()`: Update session progress
+- `complete_session()`: Mark session as completed
 
-## Batch Processing Flow
+## Processing Flow
 
-### 1. Session Initialization
+### 1. Scraping Flow (Sector-based)
 ```
-User Command → Main.py → VeggiemapScraper → BatchProgressTracker
+User Command → Main.py → HappyCowSectorScraper → SessionManager
                 ↓
         Create Session ID → Start Progress Tracking
+                ↓
+    For each sector:
+        Generate URL → Load Page → Extract Data → Save to DB → Update Progress
 ```
 
-### 2. Marker Extraction
+### 2. Enhancement Flow (Review Pages)
 ```
-VeggiemapScraper → MarkerExtractor → ClusterHandler
-        ↓
-    Load Page → Zoom In → Extract Coordinates
-```
-
-### 3. Batch Processing Loop
-```
-For each batch:
-    Extract batch markers → Parse to restaurants → Insert to database → Update progress
+User Command → Main.py → ReviewsEnhancer → DatabaseManager
+                ↓
+    Fetch incomplete restaurants → For each restaurant:
+        Load review page → Extract details → Update database
 ```
 
-### 4. Session Completion
+### 3. Session Management
 ```
-All batches processed → Mark session complete → Clean up resources
+Session Start → Track Progress → Handle Interruptions → Resume Capability
 ```
 
 ## Database Schema
@@ -145,9 +170,26 @@ CREATE TABLE restaurants (
     id SERIAL PRIMARY KEY,
     name TEXT NOT NULL,
     address TEXT,
+    phone TEXT,
+    website TEXT,
+    cow_reviews TEXT,
+    description TEXT,
+    category TEXT,
+    price_range TEXT,
+    rating DECIMAL(4,2),
+    review_count INTEGER,
     latitude DECIMAL(10, 8),
     longitude DECIMAL(11, 8),
-    -- ... other fields
+    is_vegan BOOLEAN DEFAULT FALSE,
+    is_vegetarian BOOLEAN DEFAULT FALSE,
+    has_veg_options BOOLEAN DEFAULT FALSE,
+    features TEXT[],
+    hours TEXT,
+    images_links TEXT[],
+    happycow_url TEXT,
+    scraped_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     UNIQUE(latitude, longitude)  -- Coordinate-based duplicate prevention
 );
 ```
@@ -156,14 +198,12 @@ CREATE TABLE restaurants (
 ```sql
 CREATE TABLE scraping_progress (
     id SERIAL PRIMARY KEY,
-    session_id TEXT UNIQUE NOT NULL,
-    total_restaurants INTEGER,
-    processed_restaurants INTEGER,
-    current_batch INTEGER,
-    total_batches INTEGER,
-    batch_size INTEGER,
-    is_completed BOOLEAN,
-    error_message TEXT
+    session_id VARCHAR(255) UNIQUE NOT NULL,
+    total_sectors INTEGER NOT NULL,
+    completed_sectors INTEGER NOT NULL DEFAULT 0,
+    started_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    completed_at TIMESTAMP WITH TIME ZONE,
+    is_completed BOOLEAN DEFAULT FALSE
 );
 ```
 
@@ -175,23 +215,71 @@ CREATE TABLE scraping_progress (
 SUPABASE_URL=your_supabase_url
 SUPABASE_KEY=your_supabase_key
 
-# Batch Processing
-DEFAULT_BATCH_SIZE=20
-MIN_BATCH_SIZE=5
-MAX_BATCH_SIZE=100
-
 # Scraping
 DELAY_BETWEEN_REQUESTS=2
 MAX_RETRIES=3
 USER_AGENT_ROTATION=True
+
+# Enhancement
+ENHANCE_DELAY_BETWEEN_PAGES=3  # Delay between page requests (seconds)
+
+# Batch Processing
+DEFAULT_BATCH_SIZE=20
+MIN_BATCH_SIZE=5
+MAX_BATCH_SIZE=100
 ```
 
 ### Command-Line Options
+
+#### Scraping Commands
 ```bash
-python main.py scrape --batch-size 50
-python main.py scrape --resume SESSION_ID
+# Scrape all sectors
+python main.py scrape
+
+# Scrape specific number of sectors
+python main.py scrape --max 10
+
+# Start from specific sector
+python main.py scrape --start 5 --max 10
+
+# Scrape specific region
+python main.py scrape --region central
+```
+
+#### Enhancement Commands
+```bash
+# Enhance all restaurants
+python main.py enhance
+
+# Enhance specific number
+python main.py enhance --limit 50
+
+# Enhance specific restaurant
+python main.py enhance --id 123
+
+# Start from specific ID
+python main.py enhance --start-id 500
+```
+
+#### Session Management
+```bash
+# List available sessions
 python main.py list-sessions
+
+# Resume interrupted session
+python main.py resume SESSION_ID
+```
+
+#### Utility Commands
+```bash
+# Test database connection
+python main.py test
+
+# Clear database and logs
 python main.py clear-db
+
+# Clear database, logs, and sessions
+python main.py clear-db --include-sessions
 ```
 
 ## Error Handling & Recovery

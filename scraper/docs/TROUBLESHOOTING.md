@@ -54,6 +54,33 @@
 4. Start a new session if the old one is completed
 5. Monitor logs for sector-specific errors
 
+### Enhancement Issues
+
+**Problem**: Enhancement command fails or gets stuck
+
+**Solutions**:
+1. Check if restaurants have `cow_reviews` links
+2. Verify the delay setting (`ENHANCE_DELAY_BETWEEN_PAGES`)
+3. Use smaller limits (`--limit 10`) for testing
+4. Check for CAPTCHA or throttling (increase delay)
+5. Use `--start-id` to resume from specific point
+
+**Problem**: Enhancement extracts no data
+
+**Solutions**:
+1. Check if review page structure has changed
+2. Verify CSS selectors in `reviews_enhancer.py`
+3. Test with single restaurant (`--id 123`)
+4. Check if restaurant has missing fields (use `--limit 1`)
+
+**Problem**: Enhancement is too slow
+
+**Solutions**:
+1. Reduce delay (not recommended): `ENHANCE_DELAY_BETWEEN_PAGES=1`
+2. Use smaller batches: `--limit 5`
+3. Target specific restaurants: `--id 123`
+4. Use `--start-id` to resume from specific point
+
 ### Session Management Issues
 
 **Problem**: Cannot resume interrupted sessions
@@ -81,9 +108,6 @@
 # Test database connection
 python main.py test
 
-# Test coordinate extraction only
-python main.py test-coords
-
 # List available scraping sessions
 python main.py list-sessions
 
@@ -95,6 +119,14 @@ python main.py scrape --start 5 --max 10
 
 # Clear database and start fresh
 python main.py clear-db
+
+# Clear database, logs, and sessions
+python main.py clear-db --include-sessions
+
+# Enhancement commands
+python main.py enhance --limit 5          # Test with small batch
+python main.py enhance --id 123           # Test specific restaurant
+python main.py enhance --start-id 500    # Resume from specific ID
 
 # Show help and all options
 python main.py help

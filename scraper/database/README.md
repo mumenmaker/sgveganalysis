@@ -1,180 +1,239 @@
-# Database Utilities
+# HappyCow Singapore Scraper Database
 
-This folder contains utilities for managing and monitoring the Supabase database for the HappyCow scraper project.
+## Overview
+This database stores restaurant data scraped from HappyCow's Singapore searchmap, including enhanced details from individual restaurant review pages.
 
-## Files
+## Quick Start
 
-### `check_restaurants.py`
-A comprehensive script to check the status and statistics of the restaurants table in Supabase.
+### 1. Initialize Database
+Run the SQL script in your Supabase SQL Editor:
+```sql
+-- Copy and paste the contents of setup_fresh_database.sql
+```
 
-## Database Check Script
-
-### Overview
-The `check_restaurants.py` script provides detailed statistics about the restaurants table, including record counts, coordinate coverage, and restaurant type breakdowns.
-
-### Features
-
-#### 📊 **Statistics Display**
-- Total number of restaurants in the database
-- Number of restaurants with coordinates (latitude/longitude)
-- Number of restaurants without coordinates
-- Coordinate coverage percentage
-
-#### 🍽️ **Restaurant Type Analysis**
-- Vegan restaurants count
-- Vegetarian restaurants count  
-- Restaurants with vegetarian options count
-
-#### 🔍 **Sample Data Display**
-- Sample restaurants with coordinates (showing name, coordinates, and type)
-- Sample restaurants without coordinates (if any)
-- Most recently scraped restaurants
-
-#### 📈 **Data Quality Metrics**
-- Coordinate coverage percentage
-- Recent scraping activity
-- Data completeness indicators
-
-### Usage
-
-#### Basic Usage
+### 2. Verify Setup
 ```bash
-cd /Users/zeldon/projects/mmaker/sgveganalysis/scraper
-python database/check_restaurants.py
+python main.py test
 ```
 
-#### Using Python 3.11.5 (Recommended)
+## Database Schema
+
+### Tables
+
+#### `restaurants` - Main restaurant data
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | SERIAL PRIMARY KEY | Auto-incrementing ID |
+| `name` | TEXT NOT NULL | Restaurant name |
+| `address` | TEXT | Street address |
+| `phone` | TEXT | Contact phone number |
+| `website` | TEXT | Restaurant website URL |
+| `cow_reviews` | TEXT | HappyCow reviews page URL |
+| `description` | TEXT | Restaurant description |
+| `category` | TEXT | Food category (e.g., "Asian", "Western") |
+| `price_range` | TEXT | Price level ("Inexpensive", "Moderate", "Expensive") |
+| `rating` | DECIMAL(4,2) | Average rating (0.0-5.0) |
+| `review_count` | INTEGER | Number of reviews |
+| `latitude` | DECIMAL(10,8) | GPS latitude |
+| `longitude` | DECIMAL(11,8) | GPS longitude |
+| `is_vegan` | BOOLEAN | True if vegan restaurant |
+| `is_vegetarian` | BOOLEAN | True if vegetarian restaurant |
+| `has_veg_options` | BOOLEAN | True if has vegetarian options |
+| `features` | TEXT[] | Array of features (e.g., "outdoor seating", "delivery") |
+| `hours` | TEXT | Opening hours |
+| `images_links` | TEXT[] | Array of restaurant image URLs |
+| `happycow_url` | TEXT | Original HappyCow URL |
+| `scraped_at` | TIMESTAMP | When data was scraped |
+| `created_at` | TIMESTAMP | Record creation time |
+| `updated_at` | TIMESTAMP | Last update time |
+
+#### `scraping_progress` - Session tracking
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | SERIAL PRIMARY KEY | Session ID |
+| `session_id` | VARCHAR(255) UNIQUE | Unique session identifier |
+| `total_sectors` | INTEGER | Total sectors to process |
+| `completed_sectors` | INTEGER | Sectors completed |
+| `started_at` | TIMESTAMP | Session start time |
+| `completed_at` | TIMESTAMP | Session completion time |
+| `is_completed` | BOOLEAN | Whether session is finished |
+
+### Constraints & Indexes
+
+#### Unique Constraints
+- `unique_restaurant_location` on `(latitude, longitude)` - Prevents duplicate restaurants at same location
+
+#### Indexes
+- `idx_restaurants_name` on `name`
+- `idx_restaurants_rating` on `rating`
+- `idx_restaurants_is_vegan` on `is_vegan`
+- `idx_restaurants_is_vegetarian` on `is_vegetarian`
+- `idx_restaurants_has_veg_options` on `has_veg_options`
+- `idx_restaurants_scraped_at` on `scraped_at`
+- `idx_restaurants_latitude` on `latitude`
+- `idx_restaurants_longitude` on `longitude`
+
+## Data Models
+
+### Restaurant Model (Pydantic)
+```python
+class Restaurant(BaseModel):
+    name: str
+    address: Optional[str] = None
+    phone: Optional[str] = None
+    website: Optional[str] = None
+    cow_reviews: Optional[str] = None
+    description: Optional[str] = None
+    category: Optional[str] = None
+    price_range: Optional[str] = None
+    rating: Optional[float] = None
+    review_count: Optional[int] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    is_vegan: bool = False
+    is_vegetarian: bool = False
+    has_veg_options: bool = False
+    features: List[str] = Field(default_factory=list)
+    hours: Optional[str] = None
+    images_links: List[str] = Field(default_factory=list)
+    happycow_url: Optional[str] = None
+    scraped_at: datetime = Field(default_factory=datetime.now)
+```
+
+## Usage Examples
+
+### Check Database Status
 ```bash
-cd /Users/zeldon/projects/mmaker/sgveganalysis/scraper
-/Users/zeldon/anaconda3/envs/py3115/bin/python database/check_restaurants.py
+python main.py test
 ```
 
-### Sample Output
+### Scrape Restaurants
+```bash
+# Scrape all sectors
+python main.py scrape
 
-```
-🔍 Checking Supabase Restaurants Table
-==================================================
+# Scrape specific number of sectors
+python main.py scrape --max 10
 
-============================================================
-🍽️  RESTAURANTS TABLE STATISTICS
-============================================================
-📈 Total restaurants: 78
-📍 With coordinates: 78
-❌ Without coordinates: 0
-📊 Coordinate coverage: 100.0%
-
-🔍 Sample restaurants with coordinates:
-  1. Kunthaville - 1.307464, 103.853439 (🌱 Vegan)
-  2. MOON CHAY - 1.300178, 103.852196 (🌱 Vegan)
-  3. Pure Heart 清心素食 - 1.344531, 103.855057 (🥗 Vegetarian)
-  4. Toa Payoh Lorong 8 - Vegetarian Stall - 1.34039, 103.854286 (🥗 Vegetarian)
-  5. Mahaprajna Snack Cafe 妙缘佛餐阁 - 1.335521, 103.857162 (🍽️ Other)
-
-📊 Restaurant type breakdown:
-  🌱 Vegan restaurants: 14
-  🥗 Vegetarian restaurants: 38
-  🍽️  Restaurants with veg options: 58
-
-🕒 Most recently scraped restaurants:
-  1. Vegetarian 素食 - Geylang Bahru - 2025-10-19T23:07:27.317885+00:00 ✅
-  2. Delcie's Desserts and Cakes - 2025-10-19T23:07:24.721492+00:00 ✅
-  3. Humble Food - 2025-10-19T23:07:22.131623+00:00 ✅
-
-============================================================
-✅ Database check completed successfully!
-============================================================
+# Scrape specific region
+python main.py scrape --region central
 ```
 
-### Prerequisites
+### Enhance Restaurant Data
+```bash
+# Enhance all restaurants
+python main.py enhance
 
-#### Environment Setup
-- Python 3.11.5 (recommended)
-- Supabase client library
-- Database connection configured
+# Enhance specific number
+python main.py enhance --limit 50
 
-#### Required Environment Variables
-The script uses the same database connection as the main scraper, requiring:
-- `SUPABASE_URL`
-- `SUPABASE_KEY`
+# Enhance specific restaurant
+python main.py enhance --id 500
 
-These should be set in your `.env` file in the scraper root directory.
+# Start from specific ID
+python main.py enhance --start-id 300
+```
 
-### Database Schema
+### Session Management
+```bash
+# List active sessions
+python main.py list-sessions
 
-The script queries the following fields from the `restaurants` table:
+# Resume interrupted session
+python main.py resume SESSION_ID
+```
 
-#### Core Fields
-- `id` - Primary key
-- `name` - Restaurant name
-- `latitude` - Geographic latitude
-- `longitude` - Geographic longitude
-- `scraped_at` - Timestamp when scraped
+### Database Maintenance
+```bash
+# Clear all data
+python main.py clear-db
 
-#### Classification Fields
-- `is_vegan` - Boolean: Is the restaurant vegan?
-- `is_vegetarian` - Boolean: Is the restaurant vegetarian?
-- `has_veg_options` - Boolean: Does the restaurant have vegetarian options?
+# Clear data and sessions
+python main.py clear-db --include-sessions
+```
 
-### Error Handling
+## Configuration
 
-The script includes comprehensive error handling for:
-- Database connection failures
-- Query execution errors
-- Data parsing issues
-- Network connectivity problems
+### Environment Variables
+```bash
+# Supabase Configuration
+SUPABASE_URL=your_supabase_url
+SUPABASE_KEY=your_supabase_key
 
-### Exit Codes
+# Enhancement Configuration
+ENHANCE_DELAY_BETWEEN_PAGES=3  # Delay between page requests (seconds)
+```
 
-- `0` - Success: Database check completed successfully
-- `1` - Error: Database connection failed or query error occurred
+## Data Quality
 
-### Dependencies
+### Duplicate Prevention
+- **Location-based**: Unique constraint on `(latitude, longitude)`
+- **Automatic**: Database prevents duplicate restaurants at same location
+- **Smart**: Allows restaurants with same name at different locations
 
-The script imports from the main scraper modules:
-- `database.DatabaseManager` - For Supabase connection
-- Standard Python libraries: `os`, `sys`, `logging`, `pathlib`
+### Data Validation
+- **Coordinates**: Required for all restaurants
+- **Names**: Required, cannot be empty
+- **Types**: Boolean fields for restaurant categories
+- **Arrays**: Features and images stored as PostgreSQL arrays
 
-### Troubleshooting
+### Enhancement Logic
+- **Smart Filtering**: Only enhances restaurants missing 2+ fields
+- **Comprehensive**: Extracts phone, address, description, category, price_range, rating, review_count, hours, features, images
+- **Resumable**: Can resume interrupted enhancement sessions
 
-#### Common Issues
+## Troubleshooting
 
-1. **Database Connection Failed**
-   - Verify `.env` file contains correct `SUPABASE_URL` and `SUPABASE_KEY`
-   - Check network connectivity
-   - Ensure Supabase project is active
+### Common Issues
 
-2. **Import Errors**
-   - Ensure you're running from the correct directory (`/scraper/`)
-   - Verify Python path includes the parent directory
+#### Database Connection Failed
+```bash
+# Check environment variables
+echo $SUPABASE_URL
+echo $SUPABASE_KEY
 
-3. **Permission Errors**
-   - Make sure the script is executable: `chmod +x database/check_restaurants.py`
-   - Check file permissions on the database folder
+# Test connection
+python main.py test
+```
 
-#### Debug Mode
-For detailed logging, the script uses Python's logging module with INFO level. To see more detailed output, you can modify the logging level in the script.
+#### Enhancement Too Slow
+```bash
+# Reduce delay (not recommended)
+ENHANCE_DELAY_BETWEEN_PAGES=1 python main.py enhance --limit 10
 
-### Integration
+# Use smaller batches
+python main.py enhance --limit 5
+```
 
-This script is designed to work seamlessly with the main HappyCow scraper project and can be used for:
-- **Monitoring** - Regular database health checks
-- **Validation** - Verifying scraper results
-- **Debugging** - Investigating data quality issues
-- **Reporting** - Generating database statistics
+#### CAPTCHA Issues
+```bash
+# Increase delay
+ENHANCE_DELAY_BETWEEN_PAGES=5 python main.py enhance --limit 10
 
-### Future Enhancements
+# Use start-id to resume
+python main.py enhance --start-id 500
+```
 
-Potential improvements for the script:
-- Export statistics to CSV/JSON
-- Historical trend analysis
-- Coordinate validation (checking if coordinates are within Singapore bounds)
-- Duplicate detection reporting
-- Performance metrics (query execution times)
+### Performance Tips
 
----
+1. **Batch Processing**: Use `--limit` for smaller batches
+2. **Resume Capability**: Use `--start-id` to resume from specific points
+3. **Targeted Enhancement**: Use `--id` for specific restaurants
+4. **Session Management**: Use `list-sessions` and `resume` for interrupted jobs
 
-## Related Documentation
+## File Structure
 
-- [Main Scraper README](../README.md) - Overview of the HappyCow scraper
-- [Database Setup](DATABASE_SETUP.md) - Database schema and setup instructions
-- [Project Organization](../docs/PROJECT_ORGANIZATION.md) - Overall project structure
+```
+database/
+├── README.md                    # This documentation
+├── setup_fresh_database.sql    # Complete database setup script
+└── check_restaurants.py       # Database status checker
+```
+
+## Support
+
+For issues or questions:
+1. Check the main README.md
+2. Review configuration in config.py
+3. Test database connection with `python main.py test`
+4. Check logs for detailed error messages

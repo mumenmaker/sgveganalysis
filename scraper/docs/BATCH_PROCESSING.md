@@ -1,41 +1,44 @@
 # Batch Processing Guide
 
-This document explains the batch processing and progress tracking mechanisms in the HappyCow scraper.
+This document explains the sector-based processing and progress tracking mechanisms in the HappyCow scraper.
 
 ## Overview
 
-The scraper processes restaurants in configurable batches to improve reliability, memory efficiency, and enable resume functionality for interrupted scrapes.
+The scraper processes restaurants by sectors (geographic regions) to improve reliability, memory efficiency, and enable resume functionality for interrupted scrapes.
 
 ## Key Concepts
 
-### Batch Size
-- **Default**: 20 restaurants per batch
-- **Range**: 5-100 restaurants per batch
-- **Configurable**: Via command-line arguments or environment variables
+### Sector-based Processing
+- **Grid System**: 6x8 grid covering Singapore (48 sectors total)
+- **Per-sector Saving**: Each sector is saved to database immediately
+- **Geographic Coverage**: Systematic coverage of all Singapore areas
 
 ### Session Management
 - **Unique Session IDs**: Each scraping run gets a unique identifier
-- **Progress Tracking**: Saves progress after each batch
+- **Progress Tracking**: Saves progress after each sector
 - **Resume Capability**: Continue interrupted sessions from where they left off
 
 ### Database Integration
-- **Immediate Insertion**: Each batch is saved to database immediately
-- **Progress Tables**: Tracks session progress and batch completion
+- **Immediate Insertion**: Each sector is saved to database immediately
+- **Progress Tables**: Tracks session progress and sector completion
 - **Error Recovery**: Handles database errors gracefully
 
 ## Usage
 
-### Basic Batch Processing
+### Basic Sector Processing
 
 ```bash
-# Default batch size (20)
+# Process all sectors (48 total)
 python main.py scrape
 
-# Custom batch size
-python main.py scrape --batch-size 50
+# Process specific number of sectors
+python main.py scrape --max 10
 
-# Small batch size for testing
-python main.py scrape --batch-size 5
+# Start from specific sector
+python main.py scrape --start 5 --max 10
+
+# Process specific region
+python main.py scrape --region central
 ```
 
 ### Session Management
@@ -64,7 +67,9 @@ MAX_BATCH_SIZE=100
 
 ### Command-Line Options
 
-- `--batch-size N`: Set custom batch size (5-100)
+- `--max N`: Set maximum number of sectors to process
+- `--start N`: Start from specific sector number
+- `--region REGION`: Process specific region only
 - `--resume SESSION_ID`: Resume interrupted session
 - `list-sessions`: List available sessions
 - `clear-db`: Clear database and sessions

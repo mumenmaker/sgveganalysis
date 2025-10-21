@@ -1,6 +1,6 @@
 # Documentation
 
-This folder contains comprehensive documentation for the sector-based HappyCow scraper with per-sector saving and Supabase-backed resume capability.
+This folder contains comprehensive documentation for the sector-based HappyCow scraper with per-sector saving, Supabase-backed resume capability, and restaurant data enhancement.
 
 ## Contents
 
@@ -20,13 +20,16 @@ This folder contains comprehensive documentation for the sector-based HappyCow s
 
 ## Updated Highlights
 
-- Sector-based scraping (6x8 grid)
-- Per-sector saving to Supabase (fault tolerant)
-- Session tracking and resume in `scraping_progress`
-- CLI commands for listing/resuming sessions
+- **Sector-based scraping** (6x8 grid covering Singapore)
+- **Per-sector saving** to Supabase (fault tolerant)
+- **Session tracking and resume** in `scraping_progress` table
+- **Restaurant enhancement** from individual review pages
+- **Coordinate-based duplicate prevention**
+- **CLI commands** for listing/resuming sessions and enhancement
 
 ## Commands
 
+### Scraping Commands
 ```bash
 # Scrape all sectors
 python main.py scrape
@@ -36,24 +39,60 @@ python main.py scrape --start 13 --max 5
 
 # Regions (if defined)
 python main.py scrape --region central
-
-# Sessions
-python main.py list-sessions
-python main.py resume SESSION_ID
-
-# Utilities
-python main.py test
-python main.py clear-db
 ```
 
-## Data Flow (Sector mode)
+### Session Management
+```bash
+# List available sessions
+python main.py list-sessions
 
-1. `sector_grid.py` → generate 48 sectors
-2. `url_generator.py` → build `searchmap` URLs
-3. `page_loader.py` → load in headless Chrome
-4. `data_extractor.py` → parse `[data-marker-id]` and `.details.hidden`
-5. `sector_scraper.py` → save to DB right after each sector
-6. `session_manager.py` → update `scraping_progress` each sector
+# Resume interrupted session
+python main.py resume SESSION_ID
+```
+
+### Enhancement Commands
+```bash
+# Enhance all restaurants with missing data
+python main.py enhance
+
+# Enhance specific number of restaurants
+python main.py enhance --limit 50
+
+# Enhance specific restaurant by ID
+python main.py enhance --id 123
+
+# Start enhancement from specific ID
+python main.py enhance --start-id 500
+```
+
+### Utility Commands
+```bash
+# Test database connection
+python main.py test
+
+# Clear database and logs
+python main.py clear-db
+
+# Clear database, logs, and sessions
+python main.py clear-db --include-sessions
+```
+
+## Data Flow
+
+### Scraping Flow (Sector-based)
+1. `sector_grid.py` → generate 48 sectors covering Singapore
+2. `url_generator.py` → build `searchmap` URLs for each sector
+3. `page_loader.py` → load pages in headless Chrome
+4. `data_extractor.py` → parse `[data-marker-id]` and `.details.hidden` elements
+5. `sector_scraper.py` → save to database immediately after each sector
+6. `session_manager.py` → update `scraping_progress` table each sector
+
+### Enhancement Flow (Review Pages)
+1. `database.py` → fetch restaurants missing key fields
+2. `reviews_enhancer.py` → scrape individual review pages
+3. Extract detailed data (phone, address, description, category, price_range, rating, review_count, hours, features, images)
+4. Update database records with enhanced information
+5. Progress tracking with time estimation
 
 ## Contributing
 

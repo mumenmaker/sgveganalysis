@@ -15,7 +15,7 @@ class Config:
     USER_AGENT_ROTATION = os.getenv('USER_AGENT_ROTATION', 'True').lower() == 'true'
     
     # Enhancement Configuration
-    ENHANCE_DELAY_BETWEEN_PAGES = int(os.getenv('ENHANCE_DELAY_BETWEEN_PAGES', '3'))  # Delay between page requests in seconds
+    ENHANCE_DELAY_BETWEEN_PAGES = int(os.getenv('ENHANCE_DELAY_BETWEEN_PAGES', '10'))  # Delay between page requests in seconds
     
     # Batch Processing Configuration
     DEFAULT_BATCH_SIZE = int(os.getenv('DEFAULT_BATCH_SIZE', '20'))
