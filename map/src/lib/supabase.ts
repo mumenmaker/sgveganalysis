@@ -26,21 +26,21 @@ export const fetchRestaurants = async (): Promise<Restaurant[]> => {
   return data || [];
 };
 
-// Debug function to see what categories exist in the database
-export const getAvailableCategories = async (): Promise<string[]> => {
+// Debug function to see what price ranges exist in the database
+export const getAvailablePriceRanges = async (): Promise<string[]> => {
   const { data, error } = await supabase
     .from('restaurants')
-    .select('category')
-    .not('category', 'is', null)
-    .not('category', 'eq', '');
+    .select('price_range')
+    .not('price_range', 'is', null)
+    .not('price_range', 'eq', '');
 
   if (error) {
-    console.error('Error fetching categories:', error);
+    console.error('Error fetching price ranges:', error);
     return [];
   }
 
-  const categories = [...new Set(data?.map(r => r.category) || [])];
-  return categories;
+  const priceRanges = [...new Set(data?.map(r => r.price_range) || [])];
+  return priceRanges;
 };
 
 export const fetchRestaurantsWithFilters = async (filters: {

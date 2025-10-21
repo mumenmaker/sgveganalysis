@@ -146,19 +146,31 @@ const RestaurantFilters: React.FC<RestaurantFiltersProps> = ({ filters, onFilter
         {/* Rating Filter */}
         <div className="space-y-3">
           <label className="text-sm font-semibold text-green-700 uppercase tracking-wide">
-            ⭐ Minimum Rating: {filters.min_rating || 0}
+            ⭐ Minimum Rating
           </label>
-          <Slider
-            value={[filters.min_rating || 0]}
-            onValueChange={handleRatingChange}
-            max={5}
-            min={0}
-            step={0.1}
-            className="w-full"
-          />
-          <div className="flex justify-between text-xs text-gray-500">
-            <span>0</span>
-            <span>5</span>
+          <div className="flex items-center space-x-2">
+            {[0, 1, 2, 3, 4, 5].map((rating) => (
+              <button
+                key={rating}
+                onClick={() => handleRatingChange([rating])}
+                className={`flex items-center justify-center w-8 h-8 rounded border-2 transition-colors ${
+                  (filters.min_rating || 0) >= rating
+                    ? 'bg-yellow-100 border-yellow-400 text-yellow-600'
+                    : 'bg-gray-100 border-gray-300 text-gray-400 hover:bg-gray-200'
+                }`}
+                title={`${rating} star${rating !== 1 ? 's' : ''} and above`}
+              >
+                <span className="text-sm font-medium">
+                  {rating}
+                </span>
+              </button>
+            ))}
+          </div>
+          <div className="text-xs text-gray-500">
+            {filters.min_rating === 0 
+              ? 'Show all restaurants' 
+              : `Show ${filters.min_rating}+ star restaurants`
+            }
           </div>
         </div>
 
