@@ -9,9 +9,9 @@ html, body {
   padding: 0;
 }
 
-/* Force light mode - prevent dark mode from being applied */
+/* Allow dark mode to be applied */
 html, body, #root {
-  color-scheme: light !important;
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
 #root {
@@ -293,25 +293,29 @@ button {
 }
 
 .dark {
-  /* Force light theme even in dark mode */
-  --background: #ffffff;
-  --foreground: #1f2937;
-  --card: #ffffff;
-  --card-foreground: #1f2937;
-  --popover: #ffffff;
-  --popover-foreground: #1f2937;
-  --primary: #16a34a;
+  /* Dark theme colors */
+  color-scheme: dark;
+  color: #f1f5f9;
+  background-color: #0f172a;
+  
+  --background: #0f172a;
+  --foreground: #f1f5f9;
+  --card: #1e293b;
+  --card-foreground: #f1f5f9;
+  --popover: #1e293b;
+  --popover-foreground: #f1f5f9;
+  --primary: #22c55e;
   --primary-foreground: #ffffff;
-  --secondary: #f3f4f6;
-  --secondary-foreground: #1f2937;
-  --muted: #f3f4f6;
-  --muted-foreground: #6b7280;
-  --accent: #f3f4f6;
-  --accent-foreground: #1f2937;
-  --destructive: #dc2626;
-  --border: #e5e7eb;
-  --input: #e5e7eb;
-  --ring: #16a34a;
+  --secondary: #334155;
+  --secondary-foreground: #f1f5f9;
+  --muted: #334155;
+  --muted-foreground: #94a3b8;
+  --accent: #334155;
+  --accent-foreground: #f1f5f9;
+  --destructive: #ef4444;
+  --border: #475569;
+  --input: #475569;
+  --ring: #22c55e;
   --chart-1: oklch(0.488 0.243 264.376);
   --chart-2: oklch(0.696 0.17 162.48);
   --chart-3: oklch(0.769 0.188 70.08);

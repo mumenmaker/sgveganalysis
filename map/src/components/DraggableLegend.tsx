@@ -59,7 +59,7 @@ const DraggableLegend = () => {
         cursor: isDragging ? 'grabbing' : 'grab',
       }}
     >
-      <Card className="w-64 bg-gray-700/70 border-gray-600/50 shadow-lg select-none">
+      <Card className="w-64 bg-gray-700/70 dark:bg-slate-800/90 border-gray-600/50 dark:border-slate-600/50 shadow-lg select-none transition-colors duration-300">
         <CardHeader 
           className="pb-2 cursor-move"
           onMouseDown={handleMouseDown}
