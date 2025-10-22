@@ -52,11 +52,11 @@ const RestaurantImage: React.FC<{
               className="w-16 h-16 object-cover rounded-lg border border-gray-200 hover:border-green-300 transition-colors cursor-pointer"
               crossOrigin="anonymous"
               referrerPolicy="no-referrer"
-            onLoad={(e) => {
+            onLoad={() => {
               setIsLoading(false);
               setHasError(false);
             }}
-            onError={(e) => {
+            onError={() => {
               setIsLoading(false);
               setHasError(true);
             }}

@@ -1,7 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Checkbox } from './ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
-import { Slider } from './ui/slider';
 import ReactSelect from 'react-select';
 import type { RestaurantFilters as FilterType } from '../types/restaurant';
 
