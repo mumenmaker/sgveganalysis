@@ -202,16 +202,16 @@ const RestaurantMap: React.FC<RestaurantMapProps> = ({ filters }) => {
               }
             }}
           >
-            <Popup 
-              autoPan={true}
-              closeOnClick={true}
-              autoClose={true}
-              keepInView={true}
-              maxWidth={320}
-              maxHeight={400}
-              className="custom-popup"
-            >
-              <div className="w-80 p-2 max-h-96 overflow-y-auto">
+                    <Popup 
+                      autoPan={true}
+                      closeOnClick={false}
+                      autoClose={false}
+                      keepInView={true}
+                      maxWidth={400}
+                      maxHeight={400}
+                      className="custom-popup"
+                    >
+                      <div className="w-96 h-96 p-4 overflow-y-auto">
                 <Card className="bg-white/95 backdrop-blur-sm border-green-200 shadow-lg">
                   <CardHeader className="pb-2">
                     <CardTitle className="text-base text-green-800">{restaurant.name}</CardTitle>
@@ -229,6 +229,29 @@ const RestaurantMap: React.FC<RestaurantMapProps> = ({ filters }) => {
                   </CardHeader>
                   
                   <CardContent className="space-y-1">
+                    {restaurant.images_links && restaurant.images_links.length > 0 && (
+                      <div className="mb-3">
+                        <div className="flex gap-1">
+                          {restaurant.images_links.slice(0, 2).map((imageUrl, index) => (
+                            <RestaurantImage
+                              key={index}
+                              imageUrl={imageUrl}
+                              restaurantName={restaurant.name}
+                              index={index}
+                            />
+                          ))}
+                          {restaurant.images_links.length > 2 && (
+                            <div className="w-16 h-16 bg-gray-100 rounded-lg border border-gray-200 flex items-center justify-center cursor-pointer hover:bg-gray-200 transition-colors">
+                              <div className="text-center">
+                                <div className="text-xs font-medium text-gray-600">+{restaurant.images_links.length - 2}</div>
+                                <div className="text-xs text-gray-500">more</div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                    
                     {restaurant.address && (
                       <div className="flex items-start gap-2 text-sm text-gray-600">
                         <MapPin className="h-4 w-4 mt-0.5 flex-shrink-0" />
@@ -290,31 +313,6 @@ const RestaurantMap: React.FC<RestaurantMapProps> = ({ filters }) => {
                       </div>
                     )}
                     
-                    {restaurant.images_links && restaurant.images_links.length > 0 && (
-                      <div className="mt-2">
-                        <div className="text-xs font-medium text-gray-700 mb-1">Photos:</div>
-                        
-                        
-                        <div className="flex gap-1">
-                          {restaurant.images_links.slice(0, 2).map((imageUrl, index) => (
-                            <RestaurantImage
-                              key={index}
-                              imageUrl={imageUrl}
-                              restaurantName={restaurant.name}
-                              index={index}
-                            />
-                          ))}
-                          {restaurant.images_links.length > 2 && (
-                            <div className="w-16 h-16 bg-gray-100 rounded-lg border border-gray-200 flex items-center justify-center cursor-pointer hover:bg-gray-200 transition-colors">
-                              <div className="text-center">
-                                <div className="text-xs font-medium text-gray-600">+{restaurant.images_links.length - 2}</div>
-                                <div className="text-xs text-gray-500">more</div>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
                     
                     {restaurant.hours && (
                       <div className="flex items-start gap-2 text-sm text-gray-600">
