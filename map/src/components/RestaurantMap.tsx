@@ -204,8 +204,8 @@ const RestaurantMap: React.FC<RestaurantMapProps> = ({ filters }) => {
           >
                     <Popup 
                       autoPan={true}
-                      closeOnClick={false}
-                      autoClose={false}
+                      closeOnClick={true}
+                      autoClose={true}
                       keepInView={true}
                       maxWidth={400}
                       maxHeight={400}
@@ -213,22 +213,30 @@ const RestaurantMap: React.FC<RestaurantMapProps> = ({ filters }) => {
                     >
                       <div className="w-96 h-96 p-4 overflow-y-auto">
                 <Card className="bg-white/95 backdrop-blur-sm border-green-200 shadow-lg">
-                  <CardHeader className="pb-2">
+                  <CardHeader className="pb-0 mb-0">
                     <CardTitle className="text-base text-green-800">{restaurant.name}</CardTitle>
-                    <div className="flex flex-wrap gap-2 mt-2">
+                    <div className="flex flex-wrap gap-2 mt-0">
                       {restaurant.is_vegan && (
-                        <Badge variant="default" className="bg-green-500 text-white border-green-600">🌱 Vegan</Badge>
+                        <Badge variant="default" className="bg-green-500 text-white border-green-600 mb-0 pb-0">🌱 Vegan</Badge>
                       )}
                       {restaurant.is_vegetarian && (
-                        <Badge variant="default" className="bg-orange-500 text-white border-orange-600">🥗 Vegetarian</Badge>
+                        <Badge variant="default" className="bg-orange-500 text-white border-orange-600 mb-0 pb-0">🥗 Vegetarian</Badge>
                       )}
                       {restaurant.has_veg_options && (
-                        <Badge variant="outline" className="border-green-300 text-green-700">🍃 Veg Options</Badge>
+                        <Badge variant="outline" className="border-green-300 text-green-700 mb-0 pb-0">🍃 Veg Options</Badge>
                       )}
                     </div>
                   </CardHeader>
                   
-                  <CardContent className="space-y-1">
+                  <CardContent className="space-y-0 pt-0 mt-0">
+                    {restaurant.description && (
+                      <div className="mb-3">
+                        <div className="text-sm text-gray-700 line-clamp-3">
+                          {restaurant.description}
+                        </div>
+                      </div>
+                    )}
+                    
                     {restaurant.images_links && restaurant.images_links.length > 0 && (
                       <div className="mb-3">
                         <div className="flex gap-1">
@@ -321,11 +329,6 @@ const RestaurantMap: React.FC<RestaurantMapProps> = ({ filters }) => {
                       </div>
                     )}
                     
-                    {restaurant.description && (
-                      <p className="text-sm text-gray-700 mt-2 line-clamp-3">
-                        {restaurant.description}
-                      </p>
-                    )}
                     
                     <div className="flex gap-2 mt-4">
                       {restaurant.website && (
