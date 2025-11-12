@@ -1,12 +1,13 @@
-import React, { useEffect, useState } from 'react';
-import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
+import React, { useEffect, useState, useRef } from 'react';
+import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
-import type { Restaurant } from '../types/restaurant';
+import type { Restaurant, RestaurantFilters } from '../types/restaurant';
 import { fetchRestaurants, fetchRestaurantsWithFilters } from '../lib/supabase';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { ExternalLink, Phone, MapPin, Star, Clock } from 'lucide-react';
+import type { Marker as LeafletMarker } from 'leaflet';
 
 // Component for individual image with loading state
 const RestaurantImage: React.FC<{ 
@@ -113,21 +114,35 @@ const createCustomIcon = (restaurant: Restaurant) => {
   });
 };
 
+// Component to handle opening popup for selected restaurant
+const OpenPopupForRestaurant: React.FC<{ restaurantId: number | null; markerRefs: React.MutableRefObject<Map<number, LeafletMarker>> }> = ({ restaurantId, markerRefs }) => {
+  const map = useMap();
+
+  useEffect(() => {
+    if (restaurantId !== null) {
+      const marker = markerRefs.current.get(restaurantId);
+      if (marker) {
+        marker.openPopup();
+        map.setView(marker.getLatLng(), map.getZoom(), { animate: true });
+      }
+    }
+  }, [restaurantId, markerRefs, map]);
+
+  return null;
+};
+
 interface RestaurantMapProps {
-  filters?: {
-    is_vegan?: boolean;
-    is_vegetarian?: boolean;
-    has_veg_options?: boolean;
-    category?: string;
-    price_range?: string;
-    min_rating?: number;
-  };
+  filters?: RestaurantFilters;
+  onRestaurantsChange?: (restaurants: Restaurant[]) => void;
+  selectedRestaurantId?: number | null;
+  onRestaurantSelect?: (restaurantId: number | null) => void;
 }
 
-const RestaurantMap: React.FC<RestaurantMapProps> = ({ filters }) => {
+const RestaurantMap: React.FC<RestaurantMapProps> = ({ filters, onRestaurantsChange, selectedRestaurantId, onRestaurantSelect }) => {
   const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const markerRefs = useRef<Map<number, LeafletMarker>>(new Map());
 
   useEffect(() => {
     const loadRestaurants = async () => {
@@ -141,6 +156,10 @@ const RestaurantMap: React.FC<RestaurantMapProps> = ({ filters }) => {
           : await fetchRestaurants();
         
         setRestaurants(data);
+        // Notify parent component of restaurant data changes
+        if (onRestaurantsChange) {
+          onRestaurantsChange(data);
+        }
       } catch (err) {
         setError('Failed to load restaurants');
         console.error(err);
@@ -150,7 +169,7 @@ const RestaurantMap: React.FC<RestaurantMapProps> = ({ filters }) => {
     };
 
     loadRestaurants();
-  }, [filters]);
+  }, [filters, onRestaurantsChange]);
 
   if (loading) {
     return (
@@ -191,6 +210,8 @@ const RestaurantMap: React.FC<RestaurantMapProps> = ({ filters }) => {
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
         
+        <OpenPopupForRestaurant restaurantId={selectedRestaurantId || null} markerRefs={markerRefs} />
+        
         {restaurants.map((restaurant) => (
           <Marker
             key={restaurant.id}
@@ -199,6 +220,14 @@ const RestaurantMap: React.FC<RestaurantMapProps> = ({ filters }) => {
             eventHandlers={{
               click: (e) => {
                 e.target.openPopup();
+                if (onRestaurantSelect && restaurant.id) {
+                  onRestaurantSelect(restaurant.id);
+                }
+              }
+            }}
+            ref={(ref) => {
+              if (ref && restaurant.id) {
+                markerRefs.current.set(restaurant.id, ref);
               }
             }}
           >

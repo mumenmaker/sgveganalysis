@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import RestaurantMap from './components/RestaurantMap';
 import RestaurantFilters from './components/RestaurantFilters';
+import RestaurantTable from './components/RestaurantTable';
 import DraggableLegend from './components/DraggableLegend';
-import type { RestaurantFilters as FilterType } from './types/restaurant';
+import type { RestaurantFilters as FilterType, Restaurant } from './types/restaurant';
 import { Badge } from './components/ui/badge';
 import { Utensils, Star, Sun, Moon, Menu, X } from 'lucide-react';
 
@@ -11,6 +12,15 @@ function App() {
   const [showFilters, setShowFilters] = useState(true);
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
+  const [selectedRestaurantId, setSelectedRestaurantId] = useState<number | null>(null);
+
+  // Handle restaurant update
+  const handleRestaurantUpdate = (updatedRestaurant: Restaurant) => {
+    setRestaurants(prev => 
+      prev.map(r => r.id === updatedRestaurant.id ? updatedRestaurant : r)
+    );
+  };
 
   // Handle dark mode toggle
   useEffect(() => {
@@ -26,8 +36,13 @@ function App() {
     setIsDarkMode(!isDarkMode);
   };
 
+  // Clear selection when filters change
+  useEffect(() => {
+    setSelectedRestaurantId(null);
+  }, [filters]);
+
   return (
-    <div className={`h-screen w-full flex flex-col transition-colors duration-300 ${
+    <div className={`min-h-screen w-full flex flex-col transition-colors duration-300 ${
       isDarkMode 
         ? 'bg-gradient-to-br from-slate-900 to-slate-800' 
         : 'bg-gradient-to-br from-green-50 to-emerald-50'
@@ -101,8 +116,8 @@ function App() {
         </div>
       </header>
 
-      {/* Main Content */}
-      <div className="flex-1 flex w-full overflow-hidden">
+      {/* Main Content - Scrollable */}
+      <div className="flex-1 flex w-full overflow-y-auto">
         {/* Mobile Filters Overlay */}
         {isMobileMenuOpen && (
           <div className="fixed inset-0 z-[9999] sm:hidden">
@@ -133,7 +148,7 @@ function App() {
 
         {/* Desktop Filters Sidebar */}
         {showFilters && (
-          <div className={`hidden sm:block w-80 backdrop-blur-sm border-r overflow-y-auto transition-colors duration-300 ${
+          <div className={`hidden sm:block w-80 backdrop-blur-sm border-r overflow-y-auto transition-colors duration-300 flex-shrink-0 ${
             isDarkMode 
               ? 'bg-slate-800/95 border-slate-700' 
               : 'bg-white/95 border-green-200'
@@ -147,12 +162,31 @@ function App() {
           </div>
         )}
 
-        {/* Map Container */}
-        <div className="flex-1 relative">
-          <RestaurantMap filters={filters} />
-          
-          {/* Draggable Legend */}
-          <DraggableLegend />
+        {/* Map and Table Container */}
+        <div className="flex-1 flex flex-col min-w-0">
+          {/* Map Container */}
+          <div className="flex-1 relative min-h-0" style={{ height: 'calc(100vh - 200px)' }}>
+            <RestaurantMap 
+              filters={filters} 
+              onRestaurantsChange={setRestaurants}
+              selectedRestaurantId={selectedRestaurantId}
+              onRestaurantSelect={setSelectedRestaurantId}
+            />
+            
+            {/* Draggable Legend */}
+            <DraggableLegend />
+          </div>
+
+          {/* Restaurant Table */}
+          <div className={`border-t ${isDarkMode ? 'border-slate-700' : 'border-green-200'} h-[50vh] flex flex-col flex-shrink-0`}>
+            <RestaurantTable 
+              restaurants={restaurants} 
+              isDarkMode={isDarkMode}
+              selectedRestaurantId={selectedRestaurantId}
+              onRestaurantSelect={setSelectedRestaurantId}
+              onRestaurantUpdate={handleRestaurantUpdate}
+            />
+          </div>
         </div>
       </div>
 

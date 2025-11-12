@@ -114,3 +114,19 @@ export const fetchRestaurantsWithFilters = async (filters: {
 
   return data || [];
 };
+
+export const updateRestaurant = async (id: number, updates: Partial<Restaurant>): Promise<Restaurant> => {
+  const { data, error } = await supabase
+    .from('restaurants')
+    .update(updates)
+    .eq('id', id)
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Error updating restaurant:', error);
+    throw error;
+  }
+
+  return data;
+};
