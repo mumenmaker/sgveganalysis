@@ -10,7 +10,7 @@ import {
 import type { Restaurant } from '../types/restaurant';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
-import { ExternalLink, ChevronLeft, ChevronRight, Check, X, Loader2 } from 'lucide-react';
+import { ExternalLink, ChevronLeft, ChevronRight, Check, Loader2 } from 'lucide-react';
 import { updateRestaurant } from '../lib/supabase';
 
 interface RestaurantTableProps {
@@ -28,7 +28,7 @@ const RestaurantTable: React.FC<RestaurantTableProps> = ({
   onRestaurantSelect,
   onRestaurantUpdate 
 }) => {
-  const [columnResizeMode, setColumnResizeMode] = useState<ColumnResizeMode>('onChange');
+  const [columnResizeMode] = useState<ColumnResizeMode>('onChange');
   const [editingData, setEditingData] = useState<Map<number, Partial<Restaurant>>>(new Map());
   const [updatingIds, setUpdatingIds] = useState<Set<number>>(new Set());
 
